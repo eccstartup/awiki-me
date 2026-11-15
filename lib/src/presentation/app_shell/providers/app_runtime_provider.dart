@@ -257,11 +257,16 @@ class AppRuntimeController extends StateNotifier<AppRuntimeState> {
       }
       state = state.copyWith(isInitialized: true);
     } on TimeoutException {
+      AwikiPerformanceLogger.log('app_runtime.initialize_timeout');
       ref
           .read(uiFeedbackProvider.notifier)
           .showError(AppMessage.requestTimeoutRetry());
       state = state.copyWith(isInitialized: true);
     } catch (error) {
+      AwikiPerformanceLogger.log(
+        'app_runtime.initialize_failed',
+        fields: <String, Object?>{'code': structuredAppErrorCode(error)},
+      );
       // Pending identity work is presented by the read-only recovery entry.
       // Opening the app is not an attempted recovery and needs no error toast.
       if (structuredAppErrorCode(error) != 'identity.local_registry_conflict') {
@@ -317,10 +322,26 @@ class AppRuntimeController extends StateNotifier<AppRuntimeState> {
       if (!_isSessionEpochActive(epoch)) {
         return;
       }
-      await ref
-          .read(conversationListProvider.notifier)
-          .preparePatchGeneration()
-          .timeout(_requestTimeout);
+      try {
+        await ref
+            .read(conversationListProvider.notifier)
+            .preparePatchGeneration()
+            .timeout(_requestTimeout);
+      } on TimeoutException {
+        // The committed session, identity and local product scope are already
+        // valid, so a slow or missing initial Core patch is not a session
+        // failure. Keep the session and fall back to the local snapshot while
+        // the patch stream (or the next refresh) converges.
+        AwikiPerformanceLogger.log(
+          'app_runtime.activate_session_patch_timeout',
+        );
+        unawaited(
+          ref
+              .read(conversationListProvider.notifier)
+              .refreshFastLocal()
+              .catchError((Object _) {}),
+        );
+      }
       if (!_isSessionLeaseTransitionCurrent(lease) ||
           !_isSessionEpochActive(epoch)) {
         if (_isSessionEpochActive(epoch)) {
@@ -355,6 +376,7 @@ class AppRuntimeController extends StateNotifier<AppRuntimeState> {
       _ensureRealtimeConnected(epoch);
       unawaited(_bindRemotePushBestEffort(epoch));
     } on TimeoutException {
+      AwikiPerformanceLogger.log('app_runtime.activate_session_timeout');
       if (!_isSessionLeaseTransitionCurrent(lease)) {
         return;
       }

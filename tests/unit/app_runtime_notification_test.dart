@@ -572,7 +572,7 @@ void main() {
     );
 
     test(
-      'timed out patch preparation cannot publish late and a replacement still activates',
+      'timed out patch preparation keeps the committed session and falls back locally',
       () async {
         final sessions = FakeAppSessionService(gateway);
         _FirstBlockingPatchController? patchController;
@@ -589,12 +589,15 @@ void main() {
           _epochSession('first'),
         );
 
-        await expectLater(
-          runtime.activateCommittedSession(first),
-          throwsA(isA<TimeoutException>()),
+        await runtime.activateCommittedSession(first);
+
+        expect(await sessions.currentSession(), isNotNull);
+        expect(container.read(sessionProvider).session?.did, 'did:test:first');
+        expect(
+          container.read(appRuntimeProvider).activatedDid,
+          'did:test:first',
         );
-        expect(await sessions.currentSessionLease(), isNull);
-        expect(container.read(sessionProvider).session, isNull);
+        expect(patchController!.refreshedDids, <String>['did:test:first']);
 
         final second = await _commitRuntimeSession(
           container,
@@ -608,10 +611,8 @@ void main() {
         );
 
         expect(container.read(sessionProvider).session?.did, 'did:test:second');
-        expect(patchController!.preparedDids.take(2), <String>[
-          'did:test:first',
-          'did:test:second',
-        ]);
+        expect(patchController!.preparedDids.first, 'did:test:first');
+        expect(patchController!.preparedDids, contains('did:test:second'));
       },
     );
 
@@ -5525,6 +5526,7 @@ class _FirstBlockingPatchController extends ConversationListController {
   final Completer<void> _firstStarted = Completer<void>();
   final Completer<void> _releaseFirst = Completer<void>();
   final List<String> preparedDids = <String>[];
+  final List<String> refreshedDids = <String>[];
   int _calls = 0;
 
   Future<void> get firstStarted => _firstStarted.future;
@@ -5538,6 +5540,11 @@ class _FirstBlockingPatchController extends ConversationListController {
     }
     _firstStarted.complete();
     await _releaseFirst.future;
+  }
+
+  @override
+  Future<void> refreshFastLocal() async {
+    refreshedDids.add(ref.read(sessionProvider).session?.did ?? '');
   }
 
   void completeFirst() {

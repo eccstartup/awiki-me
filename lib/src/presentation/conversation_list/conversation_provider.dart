@@ -210,6 +210,7 @@ class ConversationListController extends StateNotifier<ConversationListState> {
   ConversationPatchStartupObservation? _patchStartupObservation;
   _ConversationPatchStreamScope? _patchReconnectScope;
   Future<void>? _patchReconnectOperation;
+  int _patchInitialReconnectAttempt = 0;
   _ConversationPatchWorkScope? _patchRepairScope;
   Future<void>? _patchRepairOperation;
   final Map<String, DateTime> _locallyHiddenConversationKeys =
@@ -339,6 +340,7 @@ class ConversationListController extends StateNotifier<ConversationListState> {
     }
     final completer = Completer<void>();
     _patchReadyCompleter = completer;
+    _patchInitialReconnectAttempt = 0;
     _startPatchSubscription(
       ownerDid: fence.ownerDid,
       generation: _refreshGeneration,
@@ -807,6 +809,10 @@ class ConversationListController extends StateNotifier<ConversationListState> {
         subscriptionStartedSequence: ++_patchStartupSequence,
       );
     }
+    _trace(
+      'patch.subscribe',
+      fields: <String, Object?>{'generation': generation, 'token': token},
+    );
     _patchSubscription = ref
         .read(conversationServiceProvider)
         .watchConversationPatches(ownerDid: ownerDid)
@@ -822,6 +828,7 @@ class ConversationListController extends StateNotifier<ConversationListState> {
         .listen(
           (_) {},
           onError: (Object error, StackTrace stackTrace) {
+            _trace('patch.stream_error', fields: _patchStreamErrorFields(error));
             if (fence != null) {
               if (!_patchReady && _patchReadyCompleter != null) {
                 _scheduleInitialPatchStreamReconnect(
@@ -847,6 +854,7 @@ class ConversationListController extends StateNotifier<ConversationListState> {
             );
           },
           onDone: () {
+            _trace('patch.stream_done');
             if (fence != null) {
               if (!_patchReady && _patchReadyCompleter != null) {
                 _scheduleInitialPatchStreamReconnect(
@@ -914,9 +922,11 @@ class ConversationListController extends StateNotifier<ConversationListState> {
     if (_patchReconnectScope == scope && _patchReconnectOperation != null) {
       return;
     }
+    final attempt = ++_patchInitialReconnectAttempt;
+    final delay = _initialPatchReconnectDelay(attempt);
     late final Future<void> operation;
     operation =
-        Future<void>.delayed(Duration.zero, () async {
+        Future<void>.delayed(delay, () async {
           if (_patchReconnectScope != scope ||
               token != _patchSubscriptionToken ||
               !identical(_patchReadyCompleter, completer) ||
@@ -927,7 +937,11 @@ class ConversationListController extends StateNotifier<ConversationListState> {
           }
           _trace(
             'patch.initial_reconnect',
-            fields: <String, Object?>{'reason': reason},
+            fields: <String, Object?>{
+              'reason': reason,
+              'attempt': attempt,
+              'delay_ms': delay.inMilliseconds,
+            },
           );
           final subscription = _patchSubscription;
           _patchSubscription = null;
@@ -1074,10 +1088,18 @@ class ConversationListController extends StateNotifier<ConversationListState> {
     }
     switch (patch.kind) {
       case ConversationListPatchKind.reset:
+        _trace(
+          'patch.reset_preload_start',
+          fields: <String, Object?>{'items': patch.items.length},
+        );
         await _loadCachedPeerProfiles(
           ownerDid,
           patch.items,
           expectedEpoch: expectedEpoch,
+        );
+        _trace(
+          'patch.reset_preload_done',
+          fields: <String, Object?>{'items': patch.items.length},
         );
         break;
       case ConversationListPatchKind.upsert:
@@ -1211,14 +1233,35 @@ class ConversationListController extends StateNotifier<ConversationListState> {
 
   void _completePatchReady(int token) {
     if (token != _patchSubscriptionToken) {
+      _trace(
+        'patch.ready_skipped',
+        fields: <String, Object?>{'reason': 'stale_token'},
+      );
       return;
     }
     final epoch = _patchSubscriptionEpoch;
     final fence = _patchSessionFence;
-    if (epoch == null ||
-        !epoch.matches(ref.read(sessionProvider)) ||
-        fence == null ||
-        !_isPatchSessionFenceCurrent(fence)) {
+    if (epoch == null || fence == null) {
+      _trace(
+        'patch.ready_skipped',
+        fields: <String, Object?>{
+          'reason': epoch == null ? 'missing_epoch' : 'missing_fence',
+        },
+      );
+      return;
+    }
+    if (!epoch.matches(ref.read(sessionProvider))) {
+      _trace(
+        'patch.ready_skipped',
+        fields: <String, Object?>{'reason': 'epoch_mismatch'},
+      );
+      return;
+    }
+    if (!_isPatchSessionFenceCurrent(fence)) {
+      _trace(
+        'patch.ready_skipped',
+        fields: <String, Object?>{'reason': 'stale_fence'},
+      );
       return;
     }
     _patchReady = true;
@@ -1230,7 +1273,13 @@ class ConversationListController extends StateNotifier<ConversationListState> {
     }
     final completer = _patchReadyCompleter;
     if (completer != null && !completer.isCompleted) {
+      _trace('patch.ready');
       completer.complete();
+    } else {
+      _trace(
+        'patch.ready_skipped',
+        fields: <String, Object?>{'reason': 'no_waiter'},
+      );
     }
   }
 
@@ -2298,6 +2347,57 @@ class _ConversationPatchWorkScope {
 
   @override
   int get hashCode => Object.hash(ownerDid, generation, token, fence);
+}
+
+final RegExp _stableTraceCodePattern = RegExp(r'^[a-z0-9_.-]{1,80}$');
+
+/// Stable, sanitized identity of a patch-stream error for trace output.
+///
+/// Never records exception bodies, identities, cursors or payloads.
+Map<String, Object?> _patchStreamErrorFields(Object error) {
+  final fields = <String, Object?>{'category': error.runtimeType.toString()};
+  if (error is StateError) {
+    final message = error.message;
+    if (_stableTraceCodePattern.hasMatch(message)) {
+      fields['code'] = message;
+    }
+    return fields;
+  }
+  try {
+    final dynamic candidate = error;
+    final code = candidate.code;
+    if (code is String && _stableTraceCodePattern.hasMatch(code)) {
+      fields['code'] = code;
+    }
+    final capability = candidate.capability;
+    if (capability is String && _stableTraceCodePattern.hasMatch(capability)) {
+      fields['capability'] = capability;
+    }
+    final statusCode = candidate.statusCode;
+    if (statusCode is int) {
+      fields['status'] = statusCode;
+    }
+  } on Object {
+    // Not a typed Core error; the category alone identifies it.
+  }
+  return fields;
+}
+
+Duration _initialPatchReconnectDelay(int attempt) {
+  if (attempt <= 1) {
+    return Duration.zero;
+  }
+  const baseMilliseconds = 200;
+  const capMilliseconds = 2000;
+  final exponent = attempt - 2;
+  final milliseconds = exponent >= 4
+      ? capMilliseconds
+      : baseMilliseconds << exponent;
+  return Duration(
+    milliseconds: milliseconds < capMilliseconds
+        ? milliseconds
+        : capMilliseconds,
+  );
 }
 
 void _trace(String event, {Map<String, Object?> fields = const {}}) {

@@ -2741,6 +2741,51 @@ void main() {
   );
 
   test(
+    'repeated patch stream errors before first reset back off instead of hot-looping',
+    () async {
+      final service = _PatchConversationService(
+        conversations: const <ConversationSummary>[],
+      );
+      final container = _conversationContainer(
+        service: service,
+        notifications: FakeNotificationFacade(),
+        ownerDid: 'did:alice',
+        accountBinding: _accountBinding(),
+      );
+      addTearDown(container.dispose);
+      final notifier = container.read(conversationListProvider.notifier);
+
+      final ready = notifier.preparePatchGeneration();
+      await pumpEventQueue();
+      expect(service.watchCalls, 1);
+
+      service.emitError(StateError('transient initial error'));
+      await pumpEventQueue(times: 20);
+      expect(service.watchCalls, 2);
+
+      service.emitError(StateError('transient initial error'));
+      await pumpEventQueue(times: 20);
+      expect(service.watchCalls, 2);
+
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      expect(service.watchCalls, 3);
+
+      service.emitPatch(
+        const ConversationListPatch(
+          kind: ConversationListPatchKind.reset,
+          ownerIdentityId: 'owner-alice',
+          ownerDid: 'did:alice',
+          version: 1,
+          unreadTotal: 0,
+        ),
+      );
+
+      await ready;
+      expect(container.read(conversationListProvider).version, 1);
+    },
+  );
+
+  test(
     'same DID auth generation switch rejects old asynchronous patch',
     () async {
       final directory = _DelayedCachedDirectoryService();

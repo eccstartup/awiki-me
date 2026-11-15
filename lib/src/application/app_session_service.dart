@@ -9,6 +9,7 @@ import 'ports/im_core_runtime_port.dart';
 import 'ports/legacy_identity_upgrade_port.dart';
 import 'ports/realtime_core_port.dart';
 import '../core/app_error_classifier.dart';
+import '../core/performance_logger.dart';
 import '../domain/entities/session_identity.dart';
 
 abstract interface class AppSessionService {
@@ -229,6 +230,7 @@ class ImCoreAppSessionService
     final activeIdentityId = await _activeSessionStore?.readActiveIdentityId();
     _requireCurrentTransition(transition);
     if (activeIdentityId == null) {
+      AwikiPerformanceLogger.log('session.restore.no_active_identity');
       return null;
     }
     var identity = await _localIdentityFor(
@@ -237,11 +239,13 @@ class ImCoreAppSessionService
       throwOnDomainMismatch: false,
     );
     if (identity == null) {
+      AwikiPerformanceLogger.log('session.restore.identity_missing');
       _requireCurrentTransition(transition);
       await _activeSessionStore?.clearActiveIdentityId();
       return null;
     }
     if (!await _ensureLegacyIdentityReady(identity.identityId)) {
+      AwikiPerformanceLogger.log('session.restore.legacy_not_ready');
       return null;
     }
     _requireCurrentTransition(transition);
@@ -396,6 +400,7 @@ class ImCoreAppSessionService
     _requireCurrentTransition(transition);
     _assertIdentityDomain(identity);
     await _runtime.ensureIdentityVault(identity.identityId);
+    AwikiPerformanceLogger.log('session.activate.vault_ready');
     _requireCurrentTransition(transition);
     final previousActiveIdentityId = await _activeSessionStore
         ?.readActiveIdentityId();
@@ -409,14 +414,23 @@ class ImCoreAppSessionService
     }
     _requireCurrentTransition(transition);
     await _runtime.switchIdentity(identity.identityId);
+    AwikiPerformanceLogger.log('session.activate.switch_identity_ready');
     _requireCurrentTransition(transition);
     late final SessionAccountBinding accountBinding;
     try {
       accountBinding = await _identities.activeSyncAccountBinding();
       _requireCurrentTransition(transition);
       _assertActiveSyncAccountBinding(identity, accountBinding);
+      AwikiPerformanceLogger.log('session.activate.account_binding_ready');
     } catch (error, stackTrace) {
       _requireCurrentTransition(transition);
+      AwikiPerformanceLogger.log(
+        'session.activate.failed',
+        fields: <String, Object?>{
+          'stage': 'account_binding',
+          'code': structuredAppErrorCode(error),
+        },
+      );
       await _clearFailedActivationState();
       Error.throwWithStackTrace(error, stackTrace);
     }
@@ -427,8 +441,16 @@ class ImCoreAppSessionService
         binding: accountBinding,
       );
       _requireCurrentTransition(transition);
+      AwikiPerformanceLogger.log('session.activate.epoch_ready');
     } catch (error, stackTrace) {
       _requireCurrentTransition(transition);
+      AwikiPerformanceLogger.log(
+        'session.activate.failed',
+        fields: <String, Object?>{
+          'stage': 'epoch_barrier',
+          'code': structuredAppErrorCode(error),
+        },
+      );
       await _clearFailedActivationState();
       Error.throwWithStackTrace(error, stackTrace);
     }
@@ -445,9 +467,21 @@ class ImCoreAppSessionService
         expiresAt: auth.expiresAt,
         jwtToken: auth.bearerToken,
       );
+      AwikiPerformanceLogger.log(
+        'session.activate.auth_ready',
+        fields: <String, Object?>{'authenticated': auth.authenticated},
+      );
     } catch (error) {
       _requireCurrentTransition(transition);
-      if (!allowTransientAuth || !isTransientNetworkAppError(error)) {
+      final transient = isTransientNetworkAppError(error);
+      AwikiPerformanceLogger.log(
+        'session.activate.auth_failed',
+        fields: <String, Object?>{
+          'transient': transient,
+          'code': structuredAppErrorCode(error),
+        },
+      );
+      if (!allowTransientAuth || !transient) {
         await _clearFailedActivationState();
         rethrow;
       }
@@ -488,6 +522,10 @@ class ImCoreAppSessionService
     }
     _current = candidate;
     markSessionTransitionCommitted(transition);
+    AwikiPerformanceLogger.log(
+      'session.activate.committed',
+      fields: <String, Object?>{'authenticated': candidate.authenticated},
+    );
     return candidate;
   }
 
