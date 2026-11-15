@@ -576,6 +576,25 @@
     }
   },
   "settingsNoCredentialToExport": "当前暂无可导出的登录凭证",
+  "identityExportDialogTitle": "导出加密身份备份",
+  "identityExportDialogMessage": "为 {identityLabel} 设置备份口令。加密备份可在新设备上恢复该身份的 DID 密钥；AWiki Me 无法找回口令。",
+  "@identityExportDialogMessage": {
+    "placeholders": {
+      "identityLabel": {}
+    }
+  },
+  "identityExportPassphraseLabel": "备份口令",
+  "identityExportPassphrasePlaceholder": "至少 8 个字符",
+  "identityExportPassphraseConfirmLabel": "确认口令",
+  "identityExportPassphraseMismatch": "两次输入的口令不一致。",
+  "identityExportPassphraseTooShort": "请至少输入 8 个字符。",
+  "identityExportPresenceReason": "请验证身份以导出加密身份备份。",
+  "identityExportUserPresenceDenied": "身份验证已取消，未创建备份。",
+  "identityExportStateChanged": "当前登录身份已变化，导出已取消。",
+  "identityExportUnavailable": "当前版本暂不支持加密身份备份。",
+  "identityExportFailed": "无法创建加密身份备份。",
+  "identityExportConfirmAction": "创建备份",
+  "identityExportHelperMessage": "请分开保管文件和口令。同时持有两者的人可以恢复此身份。",
   "messageSyncStatusTitle": "消息同步",
   "messageSyncStatusIdle": "已是最新状态",
   "messageSyncStatusSyncing": "正在同步消息…",

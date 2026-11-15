@@ -161,6 +161,21 @@ class AppMessage {
   factory AppMessage.noCredentialToExport() =>
       const AppMessage._('noCredentialToExport');
 
+  factory AppMessage.identityExportUnsupported() =>
+      const AppMessage._('identityExportUnsupported');
+
+  factory AppMessage.identityExportPassphraseTooShort() =>
+      const AppMessage._('identityExportPassphraseTooShort');
+
+  factory AppMessage.identityExportUserPresenceDenied() =>
+      const AppMessage._('identityExportUserPresenceDenied');
+
+  factory AppMessage.identityExportStateChanged() =>
+      const AppMessage._('identityExportStateChanged');
+
+  factory AppMessage.identityExportFailed() =>
+      const AppMessage._('identityExportFailed');
+
   factory AppMessage.credentialPackFailed() =>
       const AppMessage._('credentialPackFailed');
 
@@ -553,6 +568,16 @@ class AppMessage {
         return l10n.deleteCredentialFailed(value ?? '');
       case 'noCredentialToExport':
         return l10n.noCredentialToExport;
+      case 'identityExportUnsupported':
+        return l10n.identityExportUnavailable;
+      case 'identityExportPassphraseTooShort':
+        return l10n.identityExportPassphraseTooShort;
+      case 'identityExportUserPresenceDenied':
+        return l10n.identityExportUserPresenceDenied;
+      case 'identityExportStateChanged':
+        return l10n.identityExportStateChanged;
+      case 'identityExportFailed':
+        return l10n.identityExportFailed;
       case 'credentialPackFailed':
         return l10n.credentialPackFailed;
       case 'localCredentialDirectoryMissing':
@@ -672,6 +697,16 @@ class AppMessage {
         return 'The operation failed. Please try again later.';
       case 'featureNotImplemented':
         return 'This feature is not available yet.';
+      case 'identityExportUnsupported':
+        return 'Encrypted identity backup is not available in this build.';
+      case 'identityExportPassphraseTooShort':
+        return 'Use at least 8 characters.';
+      case 'identityExportUserPresenceDenied':
+        return 'Identity verification was cancelled. No backup was created.';
+      case 'identityExportStateChanged':
+        return 'Your signed-in identity changed. Export was cancelled.';
+      case 'identityExportFailed':
+        return 'Could not create the encrypted identity backup.';
       case 'otpSent':
         return 'Verification code sent. Please check your messages.';
       case 'otpRateLimited':

@@ -20,6 +20,7 @@ import 'package:awiki_me/src/presentation/shared/widgets/app_widgets.dart';
 import 'package:awiki_me/src/app/app_services.dart';
 import 'package:awiki_me/src/app/app_appearance.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/widgets.dart' show EditableText;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart' show SelectionArea;
@@ -205,7 +206,7 @@ void main() {
     },
   );
 
-  testWidgets('设置页导出身份凭证显示暂未实现普通提示', (tester) async {
+  testWidgets('设置页导出身份凭证要求确认口令并在 Core 未就绪时失败关闭', (tester) async {
     final gateway = FakeAwikiGateway();
     const session = SessionIdentity(
       did: 'did:test:123',
@@ -226,15 +227,44 @@ void main() {
     expect(find.text('导出身份凭证'), findsOneWidget);
 
     await tester.tap(find.text('导出身份凭证'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
+    expect(find.text('导出加密身份备份'), findsOneWidget);
+    expect(gateway.exportCalls, 0);
+
+    final passphrase = find.descendant(
+      of: find.byKey(const Key('identity-export-passphrase-field')),
+      matching: find.byType(EditableText),
+    );
+    final confirmation = find.descendant(
+      of: find.byKey(const Key('identity-export-confirmation-field')),
+      matching: find.byType(EditableText),
+    );
+
+    await tester.enterText(passphrase, 'short');
+    await tester.enterText(confirmation, 'short');
+    await tester.tap(find.byKey(const Key('identity-export-confirm')));
+    await tester.pump();
+    expect(find.text('请至少输入 8 个字符。'), findsOneWidget);
+
+    await tester.enterText(passphrase, 'correct horse');
+    await tester.enterText(confirmation, 'wrong horse');
+    await tester.tap(find.byKey(const Key('identity-export-confirm')));
+    await tester.pump();
+    expect(find.text('两次输入的口令不一致。'), findsOneWidget);
+
+    await tester.enterText(confirmation, 'correct horse');
+    await tester.tap(find.byKey(const Key('identity-export-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('导出加密身份备份'), findsNothing);
     expect(gateway.exportCalls, 0);
     final container = ProviderScope.containerOf(
       tester.element(find.byType(SettingsPage)),
     );
     final feedback = container.read(uiFeedbackProvider);
-    expect(feedback?.danger, isFalse);
-    expect(feedback?.message.id, 'featureNotImplemented');
+    expect(feedback?.danger, isTrue);
+    expect(feedback?.message.id, 'identityExportUnsupported');
   });
 
   testWidgets('设置页未登录时禁用凭证导出和删除入口', (tester) async {

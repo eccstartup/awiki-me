@@ -1364,6 +1364,50 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsNoCredentialToExport => '当前暂无可导出的登录凭证';
 
   @override
+  String get identityExportDialogTitle => '导出加密身份备份';
+
+  @override
+  String identityExportDialogMessage(Object identityLabel) {
+    return '为 $identityLabel 设置备份口令。加密备份可在新设备上恢复该身份的 DID 密钥；AWiki Me 无法找回口令。';
+  }
+
+  @override
+  String get identityExportPassphraseLabel => '备份口令';
+
+  @override
+  String get identityExportPassphrasePlaceholder => '至少 8 个字符';
+
+  @override
+  String get identityExportPassphraseConfirmLabel => '确认口令';
+
+  @override
+  String get identityExportPassphraseMismatch => '两次输入的口令不一致。';
+
+  @override
+  String get identityExportPassphraseTooShort => '请至少输入 8 个字符。';
+
+  @override
+  String get identityExportPresenceReason => '请验证身份以导出加密身份备份。';
+
+  @override
+  String get identityExportUserPresenceDenied => '身份验证已取消，未创建备份。';
+
+  @override
+  String get identityExportStateChanged => '当前登录身份已变化，导出已取消。';
+
+  @override
+  String get identityExportUnavailable => '当前版本暂不支持加密身份备份。';
+
+  @override
+  String get identityExportFailed => '无法创建加密身份备份。';
+
+  @override
+  String get identityExportConfirmAction => '创建备份';
+
+  @override
+  String get identityExportHelperMessage => '请分开保管文件和口令。同时持有两者的人可以恢复此身份。';
+
+  @override
   String get messageSyncStatusTitle => '消息同步';
 
   @override

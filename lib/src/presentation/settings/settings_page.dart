@@ -31,6 +31,7 @@ import 'display_settings_page.dart';
 import 'notify_settings.dart';
 import '../shared/display_scale.dart';
 import '../shared/local_credential_delete_dialog.dart';
+import 'identity_export_dialog.dart';
 
 enum SettingsDetail { devices, language, display }
 
@@ -263,7 +264,13 @@ class SettingsPage extends ConsumerWidget {
             leading: leading(
               const _SettingsIcon(icon: CupertinoIcons.archivebox),
             ),
-            onTap: session == null ? null : runtime.exportCurrentCredential,
+            onTap: session == null
+                ? null
+                : () => _showExportCredentialDialog(
+                    context,
+                    runtime,
+                    session,
+                  ),
           ),
           const AppSectionDivider(),
           AppListTile(
@@ -413,7 +420,13 @@ class SettingsPage extends ConsumerWidget {
             _DesktopSettingsRow(
               key: const Key('settings-export-credential-row'),
               title: l10n.settingsExportCredential,
-              onTap: session == null ? null : runtime.exportCurrentCredential,
+              onTap: session == null
+                  ? null
+                  : () => _showExportCredentialDialog(
+                      context,
+                      runtime,
+                      session,
+                    ),
             ),
             _DesktopSettingsRow(
               key: const Key('settings-logout-row'),
@@ -625,7 +638,13 @@ class SettingsPage extends ConsumerWidget {
               iconKey: const Key('settings-export-credential-icon'),
               title: l10n.settingsExportCredential,
               height: optionRowHeight,
-              onTap: session == null ? null : runtime.exportCurrentCredential,
+              onTap: session == null
+                  ? null
+                  : () => _showExportCredentialDialog(
+                      context,
+                      runtime,
+                      session,
+                    ),
             ),
             _QuietSettingsRow(
               key: const Key('settings-logout-row'),
@@ -777,6 +796,25 @@ class SettingsPage extends ConsumerWidget {
             Navigator.of(context).pop();
           }
         },
+      ),
+    );
+  }
+
+  void _showExportCredentialDialog(
+    BuildContext context,
+    AppRuntimeController runtime,
+    SessionIdentity identity,
+  ) {
+    final presenceReason = context.l10n.identityExportPresenceReason;
+    final identityLabel = _sessionProfileTitle(identity);
+    AppNavigator.showDialog<void>(
+      context,
+      (_) => IdentityExportDialog(
+        identityLabel: identityLabel,
+        onExport: (passphrase) => runtime.exportCurrentCredential(
+          passphrase: passphrase,
+          presenceReason: presenceReason,
+        ),
       ),
     );
   }

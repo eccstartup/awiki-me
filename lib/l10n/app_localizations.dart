@@ -2652,6 +2652,90 @@ abstract class AppLocalizations {
   /// **'当前暂无可导出的登录凭证'**
   String get settingsNoCredentialToExport;
 
+  /// No description provided for @identityExportDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出加密身份备份'**
+  String get identityExportDialogTitle;
+
+  /// No description provided for @identityExportDialogMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'为 {identityLabel} 设置备份口令。加密备份可在新设备上恢复该身份的 DID 密钥；AWiki Me 无法找回口令。'**
+  String identityExportDialogMessage(Object identityLabel);
+
+  /// No description provided for @identityExportPassphraseLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份口令'**
+  String get identityExportPassphraseLabel;
+
+  /// No description provided for @identityExportPassphrasePlaceholder.
+  ///
+  /// In zh, this message translates to:
+  /// **'至少 8 个字符'**
+  String get identityExportPassphrasePlaceholder;
+
+  /// No description provided for @identityExportPassphraseConfirmLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认口令'**
+  String get identityExportPassphraseConfirmLabel;
+
+  /// No description provided for @identityExportPassphraseMismatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'两次输入的口令不一致。'**
+  String get identityExportPassphraseMismatch;
+
+  /// No description provided for @identityExportPassphraseTooShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'请至少输入 8 个字符。'**
+  String get identityExportPassphraseTooShort;
+
+  /// No description provided for @identityExportPresenceReason.
+  ///
+  /// In zh, this message translates to:
+  /// **'请验证身份以导出加密身份备份。'**
+  String get identityExportPresenceReason;
+
+  /// No description provided for @identityExportUserPresenceDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'身份验证已取消，未创建备份。'**
+  String get identityExportUserPresenceDenied;
+
+  /// No description provided for @identityExportStateChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前登录身份已变化，导出已取消。'**
+  String get identityExportStateChanged;
+
+  /// No description provided for @identityExportUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前版本暂不支持加密身份备份。'**
+  String get identityExportUnavailable;
+
+  /// No description provided for @identityExportFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法创建加密身份备份。'**
+  String get identityExportFailed;
+
+  /// No description provided for @identityExportConfirmAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建备份'**
+  String get identityExportConfirmAction;
+
+  /// No description provided for @identityExportHelperMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'请分开保管文件和口令。同时持有两者的人可以恢复此身份。'**
+  String get identityExportHelperMessage;
+
   /// No description provided for @messageSyncStatusTitle.
   ///
   /// In zh, this message translates to:

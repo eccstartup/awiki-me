@@ -19,6 +19,7 @@ import '../../../core/performance_logger.dart';
 import '../../../application/models/app_session.dart';
 import '../../../application/remote_push_installation_coordinator.dart';
 import '../../../application/remote_push_message_sync_coordinator.dart';
+import '../../../application/ports/identity_export_port.dart';
 import '../../../application/ports/remote_push_sync_port.dart';
 import '../../../application/agent/agent_control_projection.dart';
 import '../../../application/tenant/app_tenant.dart';
@@ -896,10 +897,66 @@ class AppRuntimeController extends StateNotifier<AppRuntimeState> {
     }
   }
 
-  Future<void> exportCurrentCredential() async {
-    ref
-        .read(uiFeedbackProvider.notifier)
-        .showInfo(AppMessage.featureNotImplemented());
+  Future<void> exportCurrentCredential({
+    required String passphrase,
+    required String presenceReason,
+  }) async {
+    final sessionState = ref.read(sessionProvider);
+    final session = sessionState.session;
+    final epoch = sessionState.activeEpoch;
+    if (session == null || epoch == null) {
+      ref
+          .read(uiFeedbackProvider.notifier)
+          .showError(AppMessage.noCredentialToExport());
+      return;
+    }
+    final identityId = session.localIdentitySelector;
+    try {
+      final savedPath = await ref
+          .read(identityExportServiceProvider)
+          .exportCurrentIdentity(
+            identityId: identityId,
+            passphrase: passphrase,
+            presenceReason: presenceReason,
+            isContextCurrent: () {
+              if (!mounted) return false;
+              final current = ref.read(sessionProvider);
+              return epoch.matches(current) &&
+                  current.session?.localIdentitySelector == identityId;
+            },
+          );
+      if (!mounted || savedPath == null || savedPath.trim().isEmpty) {
+        return;
+      }
+      ref
+          .read(uiFeedbackProvider.notifier)
+          .showInfo(AppMessage.exportedTo(savedPath));
+    } on IdentityExportException catch (error) {
+      if (!mounted) return;
+      ref
+          .read(uiFeedbackProvider.notifier)
+          .showError(_identityExportMessage(error));
+    } catch (_) {
+      if (!mounted) return;
+      ref
+          .read(uiFeedbackProvider.notifier)
+          .showError(AppMessage.identityExportFailed());
+    }
+  }
+
+  AppMessage _identityExportMessage(IdentityExportException error) {
+    return switch (error.code) {
+      'identity_export.unsupported' => AppMessage.identityExportUnsupported(),
+      'identity_export.no_identity' => AppMessage.noCredentialToExport(),
+      'identity_export.passphrase_too_short' =>
+        AppMessage.identityExportPassphraseTooShort(),
+      'identity_export.user_presence_denied' ||
+      'identity_export.user_presence_failed' =>
+        AppMessage.identityExportUserPresenceDenied(),
+      'identity_export.state_changed' => AppMessage.identityExportStateChanged(),
+      'identity_export.save_failed' => AppMessage.documentSaveFailed(),
+      _ => AppMessage.identityExportFailed(),
+    };
   }
 
   Future<void> importCredentialArchive() async {

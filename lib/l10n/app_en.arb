@@ -575,6 +575,25 @@
     }
   },
   "settingsNoCredentialToExport": "No signed-in credential available to export",
+  "identityExportDialogTitle": "Export encrypted identity backup",
+  "identityExportDialogMessage": "Create a passphrase for {identityLabel}. The encrypted backup can restore this identity's DID keys on a new device. AWiki Me cannot recover the passphrase.",
+  "@identityExportDialogMessage": {
+    "placeholders": {
+      "identityLabel": {}
+    }
+  },
+  "identityExportPassphraseLabel": "Backup passphrase",
+  "identityExportPassphrasePlaceholder": "At least 8 characters",
+  "identityExportPassphraseConfirmLabel": "Confirm passphrase",
+  "identityExportPassphraseMismatch": "The passphrases do not match.",
+  "identityExportPassphraseTooShort": "Use at least 8 characters.",
+  "identityExportPresenceReason": "Confirm your identity to export an encrypted identity backup.",
+  "identityExportUserPresenceDenied": "Identity verification was cancelled. No backup was created.",
+  "identityExportStateChanged": "Your signed-in identity changed. Export was cancelled.",
+  "identityExportUnavailable": "Encrypted identity backup is not available in this build.",
+  "identityExportFailed": "Could not create the encrypted identity backup.",
+  "identityExportConfirmAction": "Create backup",
+  "identityExportHelperMessage": "Store the file and passphrase separately. Anyone with both can restore this identity.",
   "messageSyncStatusTitle": "Message sync",
   "messageSyncStatusIdle": "Up to date",
   "messageSyncStatusSyncing": "Syncing messages…",

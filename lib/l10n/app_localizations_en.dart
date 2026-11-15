@@ -1439,6 +1439,58 @@ class AppLocalizationsEn extends AppLocalizations {
       'No signed-in credential available to export';
 
   @override
+  String get identityExportDialogTitle => 'Export encrypted identity backup';
+
+  @override
+  String identityExportDialogMessage(Object identityLabel) {
+    return 'Create a passphrase for $identityLabel. The encrypted backup can '
+        "restore this identity's DID keys on a new device. AWiki Me cannot "
+        'recover the passphrase.';
+  }
+
+  @override
+  String get identityExportPassphraseLabel => 'Backup passphrase';
+
+  @override
+  String get identityExportPassphrasePlaceholder => 'At least 8 characters';
+
+  @override
+  String get identityExportPassphraseConfirmLabel => 'Confirm passphrase';
+
+  @override
+  String get identityExportPassphraseMismatch => 'The passphrases do not match.';
+
+  @override
+  String get identityExportPassphraseTooShort => 'Use at least 8 characters.';
+
+  @override
+  String get identityExportPresenceReason =>
+      'Confirm your identity to export an encrypted identity backup.';
+
+  @override
+  String get identityExportUserPresenceDenied =>
+      'Identity verification was cancelled. No backup was created.';
+
+  @override
+  String get identityExportStateChanged =>
+      'Your signed-in identity changed. Export was cancelled.';
+
+  @override
+  String get identityExportUnavailable =>
+      'Encrypted identity backup is not available in this build.';
+
+  @override
+  String get identityExportFailed =>
+      'Could not create the encrypted identity backup.';
+
+  @override
+  String get identityExportConfirmAction => 'Create backup';
+
+  @override
+  String get identityExportHelperMessage =>
+      'Store the file and passphrase separately. Anyone with both can restore this identity.';
+
+  @override
   String get messageSyncStatusTitle => 'Message sync';
 
   @override

@@ -1021,6 +1021,7 @@ class AppTextField extends StatefulWidget {
     this.focusNode,
     this.enabled = true,
     this.multiline = false,
+    this.obscureText = false,
     this.keyboardType,
     this.showLabel = true,
     this.prefix,
@@ -1038,6 +1039,7 @@ class AppTextField extends StatefulWidget {
   final FocusNode? focusNode;
   final bool enabled;
   final bool multiline;
+  final bool obscureText;
   final TextInputType? keyboardType;
   final bool showLabel;
   final Widget? prefix;
@@ -1079,6 +1081,9 @@ class _AppTextFieldState extends State<AppTextField> {
       maxLines: widget.multiline ? 5 : 1,
       textAlign: TextAlign.left,
       keyboardType: widget.keyboardType,
+      obscureText: widget.obscureText,
+      autocorrect: !widget.obscureText,
+      enableSuggestions: !widget.obscureText,
       padding: widget.multiline
           ? EdgeInsets.symmetric(vertical: responsive.spacing(10))
           : EdgeInsets.zero,

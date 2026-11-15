@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:awiki_me/src/application/models/conversation_patch.dart';
 import 'package:awiki_me/src/application/ports/identity_core_port.dart';
+import 'package:awiki_me/src/application/ports/identity_export_port.dart';
+import 'package:awiki_me/src/application/ports/user_presence_port.dart';
 import 'package:awiki_me/src/app/app_services.dart';
 import 'package:awiki_me/src/app/ui_feedback.dart';
 import 'package:awiki_me/src/domain/entities/session_identity.dart';
@@ -61,7 +65,20 @@ void main() {
       expect(feedback?.message.id, 'featureNotImplemented');
     });
 
-    test('导出本地凭证显示暂未实现普通提示', () async {
+    test('无登录身份时导出提示未登录', () async {
+      await container
+          .read(appRuntimeProvider.notifier)
+          .exportCurrentCredential(
+            passphrase: 'correct horse',
+            presenceReason: 'export test backup',
+          );
+
+      final feedback = container.read(uiFeedbackProvider);
+      expect(feedback?.danger, isTrue);
+      expect(feedback?.message.id, 'noCredentialToExport');
+    });
+
+    test('Core 未提供加密备份时导出失败关闭', () async {
       container
           .read(sessionProvider.notifier)
           .setSession(
@@ -73,18 +90,74 @@ void main() {
               jwtToken: 'token-123',
             ),
           );
-      gateway.exportedPath = '/tmp/awiki-credential-alice-default.zip';
 
       await container
           .read(appRuntimeProvider.notifier)
-          .exportCurrentCredential();
+          .exportCurrentCredential(
+            passphrase: 'correct horse',
+            presenceReason: 'export test backup',
+          );
 
       expect(gateway.exportCalls, 0);
-      expect(container.read(uiFeedbackProvider)?.danger, isFalse);
+      expect(container.read(uiFeedbackProvider)?.danger, isTrue);
       expect(
         container.read(uiFeedbackProvider)?.message.id,
-        'featureNotImplemented',
+        'identityExportUnsupported',
       );
+    });
+
+    test('导出加密身份备份经由 Core 端口保存不透明包', () async {
+      const session = SessionIdentity(
+        did: 'did:test:alice-export',
+        localIdentityId: 'identity-alice-export',
+        credentialName: 'alice-local',
+        displayName: 'Alice',
+        handle: 'alice',
+        jwtToken: 'token-123',
+      );
+      final exportPort = _RecordingIdentityExportPort();
+      final presence = _RecordingUserPresence(result: true);
+      final picker = FakeAttachmentPickerService()
+        ..nextSavedPath = '/tmp/awiki-identity-alice.awiki-backup';
+      final isolatedContainer = ProviderContainer(
+        overrides: <Override>[
+          awikiAccountGatewayProvider.overrideWithValue(gateway),
+          ...fakeApplicationServiceOverrides(gateway),
+          realtimeGatewayProvider.overrideWithValue(FakeRealtimeGateway()),
+          notificationFacadeProvider.overrideWithValue(
+            FakeNotificationFacade(),
+          ),
+          updateServiceProvider.overrideWithValue(FakeUpdateService()),
+          identityExportPortProvider.overrideWithValue(exportPort),
+          userPresencePortProvider.overrideWithValue(presence),
+          attachmentPickerServiceProvider.overrideWithValue(picker),
+        ],
+      );
+      addTearDown(isolatedContainer.dispose);
+      isolatedContainer.read(sessionProvider.notifier).setSession(session);
+
+      await isolatedContainer
+          .read(appRuntimeProvider.notifier)
+          .exportCurrentCredential(
+            passphrase: 'correct horse',
+            presenceReason: 'export test backup',
+          );
+
+      expect(exportPort.lastIdentityId, 'identity-alice-export');
+      expect(utf8.decode(exportPort.passphraseCopy!), 'correct horse');
+      expect(exportPort.lastPassphrase, everyElement(0));
+      expect(presence.lastReason, 'export test backup');
+      expect(picker.saveCalls, 1);
+      expect(
+        picker.lastSavedFilename,
+        'awiki-identity-alice-20261115-000000.awiki-backup',
+      );
+      expect(picker.lastSavedMimeType, 'application/vnd.awiki.identity-backup');
+      expect(picker.lastSavedBytes, <int>[1, 2, 3, 4]);
+      final feedback = isolatedContainer.read(uiFeedbackProvider);
+      expect(feedback?.danger, isFalse);
+      expect(feedback?.message.id, 'exportedTo');
+      expect(feedback?.message.path, '/tmp/awiki-identity-alice.awiki-backup');
     });
 
     test('注销当前凭证会删除本地凭证并清空当前会话', () async {
@@ -513,6 +586,43 @@ void main() {
       expect(container.read(uiFeedbackProvider)?.message.value, '1');
     });
   });
+}
+
+class _RecordingIdentityExportPort implements IdentityExportPort {
+  String? lastIdentityId;
+  Uint8List? lastPassphrase;
+  Uint8List? passphraseCopy;
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<IdentityExportPackage> exportIdentityPackage({
+    required String identityId,
+    required Uint8List passphrase,
+  }) async {
+    lastIdentityId = identityId;
+    lastPassphrase = passphrase;
+    passphraseCopy = Uint8List.fromList(passphrase);
+    return IdentityExportPackage(
+      fileName: 'awiki-identity-alice-20261115-000000.awiki-backup',
+      mimeType: 'application/vnd.awiki.identity-backup',
+      bytes: Uint8List.fromList(<int>[1, 2, 3, 4]),
+    );
+  }
+}
+
+class _RecordingUserPresence implements UserPresencePort {
+  _RecordingUserPresence({required this.result});
+
+  final bool result;
+  String? lastReason;
+
+  @override
+  Future<bool> confirm({required String reason}) async {
+    lastReason = reason;
+    return result;
+  }
 }
 
 class _HangingCancelConversationService extends FakeConversationService {
