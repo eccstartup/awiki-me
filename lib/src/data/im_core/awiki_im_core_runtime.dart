@@ -372,7 +372,8 @@ Future<void> _ensureIdentityCustodyReady(
   final device = await instance.identityDeviceSummary(selector);
   if (device.readiness != core.IdentityDeviceReadiness.memberReady &&
       device.readiness != core.IdentityDeviceReadiness.adminAwaitingRoot &&
-      device.readiness != core.IdentityDeviceReadiness.adminReady) {
+      device.readiness != core.IdentityDeviceReadiness.adminReady &&
+      device.readiness != core.IdentityDeviceReadiness.rootOnly) {
     throw const core.AwikiImCoreException(
       code: 'identity_custody_unavailable',
       message: 'ANP Identity device custody is not ready.',

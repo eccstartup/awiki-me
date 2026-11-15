@@ -14,6 +14,8 @@ import '../../../app/app_locale.dart';
 import '../../../app/app_services.dart';
 import '../../../app/ui_feedback.dart';
 import '../../../application/app_session_service.dart';
+import '../../../application/identity_backup_import_service.dart';
+import '../../../application/ports/identity_backup_import_port.dart';
 import '../../../core/app_error_classifier.dart';
 import '../../../core/performance_logger.dart';
 import '../../../application/models/app_session.dart';
@@ -981,10 +983,91 @@ class AppRuntimeController extends StateNotifier<AppRuntimeState> {
     };
   }
 
-  Future<void> importCredentialArchive() async {
-    ref
-        .read(uiFeedbackProvider.notifier)
-        .showInfo(AppMessage.featureNotImplemented());
+  Future<void> importIdentityBackup({
+    required IdentityBackupSelection backup,
+    required String passphrase,
+    required String presenceReason,
+  }) async {
+    final sessionState = ref.read(sessionProvider);
+    final epoch = sessionState.activeEpoch;
+    try {
+      final outcome = await ref
+          .read(identityBackupImportServiceProvider)
+          .importBackup(
+            backup: backup,
+            passphrase: passphrase,
+            presenceReason: presenceReason,
+            isContextCurrent: () {
+              if (!mounted || epoch == null) return false;
+              return epoch.matches(ref.read(sessionProvider));
+            },
+          );
+      if (!mounted) return;
+      if (outcome.alreadyPresent &&
+          _sameLocalIdentityId(
+            ref.read(sessionProvider).session,
+            outcome.identityId,
+          )) {
+        ref
+            .read(uiFeedbackProvider.notifier)
+            .showInfo(AppMessage.identityBackupImportAlreadyPresent());
+        return;
+      }
+      await logout();
+      if (!mounted) return;
+      final credentials = await _localCredentialsFor(ref);
+      if (!mounted) return;
+      ref.read(sessionProvider.notifier).setLocalCredentials(credentials);
+      ref
+          .read(uiFeedbackProvider.notifier)
+          .showInfo(AppMessage.importSuccessSelectCredential());
+    } on IdentityBackupImportException catch (error) {
+      if (!mounted) return;
+      ref
+          .read(uiFeedbackProvider.notifier)
+          .showError(_identityBackupImportMessage(error));
+    } catch (_) {
+      if (!mounted) return;
+      ref
+          .read(uiFeedbackProvider.notifier)
+          .showError(AppMessage.identityBackupImportFailed());
+    }
+  }
+
+  bool _sameLocalIdentityId(SessionIdentity? session, String identityId) {
+    final currentId = session?.localIdentityId?.trim();
+    return currentId != null &&
+        currentId.isNotEmpty &&
+        currentId == identityId.trim();
+  }
+
+  AppMessage _identityBackupImportMessage(
+    IdentityBackupImportException error,
+  ) {
+    return switch (error.code) {
+      'identity_backup_import.unsupported' =>
+        AppMessage.identityBackupImportUnsupported(),
+      'identity_backup_import.invalid_file' ||
+      'identity_backup_bad_magic' ||
+      'identity_backup_unsupported_version' ||
+      'identity_backup_payload_invalid' =>
+        AppMessage.identityBackupImportInvalidFile(),
+      'identity_backup_import.too_large' ||
+      'identity_backup_too_large' => AppMessage.identityBackupImportTooLarge(),
+      'identity_backup_import.passphrase_required' ||
+      'identity_backup_bad_passphrase' =>
+        AppMessage.identityBackupImportBadPassphrase(),
+      'identity_backup_unsupported_custody' =>
+        AppMessage.identityBackupImportUnsupportedCustody(),
+      'identity_backup_import.conflict' =>
+        AppMessage.identityBackupImportConflict(),
+      'identity_backup_import.user_presence_denied' ||
+      'identity_backup_import.user_presence_failed' =>
+        AppMessage.identityBackupImportUserPresenceDenied(),
+      'identity_backup_import.state_changed' =>
+        AppMessage.identityBackupImportStateChanged(),
+      _ => AppMessage.identityBackupImportFailed(),
+    };
   }
 
   Future<void> _refreshAuthenticatedData(SessionEpoch epoch) async {

@@ -1,6 +1,7 @@
 import 'package:awiki_me/src/app/app_locale.dart';
 import 'package:awiki_me/src/app/ui_feedback.dart';
 import 'package:awiki_me/src/application/desktop_window_placement_service.dart';
+import 'package:awiki_me/src/application/ports/identity_backup_import_port.dart';
 import 'package:awiki_me/src/application/tenant/app_tenant.dart';
 import 'package:awiki_me/src/domain/entities/agent/agent_bootstrap.dart';
 import 'package:awiki_me/src/domain/entities/agent/agent_status.dart';
@@ -20,7 +21,6 @@ import 'package:awiki_me/src/presentation/shared/widgets/app_widgets.dart';
 import 'package:awiki_me/src/app/app_services.dart';
 import 'package:awiki_me/src/app/app_appearance.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/widgets.dart' show EditableText;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart' show SelectionArea;
@@ -267,6 +267,44 @@ void main() {
     expect(feedback?.message.id, 'identityExportUnsupported');
   });
 
+  testWidgets('设置页在 Core 支持时打开导入身份备份对话框', (tester) async {
+    const session = SessionIdentity(
+      did: 'did:test:123',
+      credentialName: 'default',
+      displayName: 'Alice',
+      handle: 'alice',
+      jwtToken: 'token-123',
+    );
+
+    await tester.pumpWidget(
+      buildLocalizedTestApp(
+        home: const SettingsPage(),
+        session: session,
+        providerOverrides: <Override>[
+          identityBackupImportPortProvider.overrideWithValue(
+            const _SupportedIdentityBackupImportPort(),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final row = find.text('导入身份备份');
+    await tester.scrollUntilVisible(
+      row,
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+
+    expect(find.text('导入加密身份备份'), findsOneWidget);
+    expect(
+      find.byKey(const Key('identity-backup-import-pick-file')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('设置页未登录时禁用凭证导出和删除入口', (tester) async {
     final gateway = FakeAwikiGateway();
 
@@ -278,6 +316,17 @@ void main() {
     expect(find.text('退出并删除当前账号的本地数据'), findsNothing);
 
     await tester.tap(find.text('导出身份凭证'));
+    await tester.scrollUntilVisible(
+      find.text('导入身份备份'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('导入身份备份'));
+    await tester.scrollUntilVisible(
+      find.text('退出并删除当前数据'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('退出并删除当前数据'));
     await tester.pump();
 
@@ -409,10 +458,10 @@ void main() {
     );
     expect(profileRect.top, greaterThan(accountRect.top));
     expect(profileRect.bottom, lessThan(accountRect.bottom));
-    expect(profileRect.height, 84);
+    expect(profileRect.height, 76);
     expect(
       tester.getSize(find.byKey(const Key('settings-profile-avatar'))),
-      const Size.square(52),
+      const Size.square(48),
     );
     for (final titleKey in <String>[
       'settings-account-section-title',
@@ -434,7 +483,7 @@ void main() {
       tester.getSize(find.byKey(const Key('settings-current-version-icon'))),
       const Size.square(24),
     );
-    expect(tester.getSize(versionRow).height, 52);
+    expect(tester.getSize(versionRow).height, 48);
     expect(
       find.descendant(
         of: versionRow,
@@ -447,10 +496,11 @@ void main() {
       'settings-check-updates-row',
       'settings-language-row',
       'settings-export-credential-row',
+      'settings-import-identity-backup-row',
       'settings-logout-row',
       'settings-delete-credential-row',
     ]) {
-      expect(tester.getSize(find.byKey(Key(row))).height, 52, reason: row);
+      expect(tester.getSize(find.byKey(Key(row))).height, 48, reason: row);
     }
     expect(find.byKey(const Key('settings-personal-agent-row')), findsNothing);
     expect(find.text('个人助理'), findsNothing);
@@ -459,6 +509,7 @@ void main() {
       findsNothing,
     );
     expect(find.text('导出身份凭证'), findsOneWidget);
+    expect(find.text('导入身份备份'), findsOneWidget);
     expect(find.text('退出登录'), findsOneWidget);
     expect(find.text('退出并删除当前数据'), findsOneWidget);
     expect(tester.getRect(find.text('退出并删除当前数据')).bottom, lessThan(844));
@@ -1657,6 +1708,31 @@ void main() {
     expect(control.lastRevokedPersonalAgentDid, 'did:agent:message:two');
     expect(identities.lastRevokedDaemonSubkeySelector, isNull);
   });
+}
+
+final class _SupportedIdentityBackupImportPort
+    implements IdentityBackupImportPort {
+  const _SupportedIdentityBackupImportPort();
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<IdentityBackupSummary> inspectIdentityBackup({
+    required Uint8List bytes,
+    required Uint8List passphrase,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<IdentityBackupImportOutcome> importIdentityBackup({
+    required Uint8List bytes,
+    required Uint8List passphrase,
+    required bool userPresenceConfirmed,
+  }) async {
+    throw UnimplementedError();
+  }
 }
 
 final class _FakeDesktopWindowPlacementService

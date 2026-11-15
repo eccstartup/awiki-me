@@ -7,8 +7,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/app_services.dart';
 import '../../app/app_router.dart';
 import '../../app/ui_feedback.dart';
+import '../../domain/entities/identity_method.dart';
 import '../../domain/entities/profile_patch.dart';
 import '../../domain/entities/user_profile.dart';
+import '../../domain/services/did_document_url.dart';
 import '../../l10n/app_message.dart';
 import '../../l10n/l10n.dart';
 import '../friends/friends_provider.dart';
@@ -100,6 +102,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final homepageUrl = ref
         .watch(profileHomepageResolverProvider)
         .homepageUrl(profile);
+    final did = profile.did.trim();
+    final didDocumentUrl = wbaDidDocumentUrl(did);
+    final verificationMethods = did.isEmpty
+        ? const <IdentityVerificationMethod>[]
+        : ref
+                  .watch(identityDocumentSummaryProvider(did))
+                  .valueOrNull
+                  ?.verificationMethods ??
+              const <IdentityVerificationMethod>[];
     final responsive = context.awikiResponsive;
     final pageTitle = widget.title ?? context.l10n.profileMeTitle;
     final friendsState = ref.watch(friendsProvider);
@@ -155,12 +166,20 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     SelectionContainer.disabled(
                       child: _CompactMeLinks(
                         homepageUrl: homepageUrl,
+                        didDocumentUrl: didDocumentUrl,
+                        publicKeyCount: verificationMethods.length,
                         pendingDeviceRequests: pendingDeviceRequests,
                         onDevicesTap: () => AppNavigator.push<void>(
                           context,
                           (_) => const DevicesPage(),
                         ),
                         onOpenHomepage: () => _openHomepage(homepageUrl),
+                        onOpenDidDocument: () =>
+                            _openExternalUrl(didDocumentUrl!),
+                        onOpenPublicKeys: verificationMethods.isEmpty
+                            ? null
+                            : () =>
+                                  _showPublicKeys(context, verificationMethods),
                         onSettingsTap: () => _openSettings(context),
                       ),
                     ),
@@ -242,6 +261,30 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         showButtonChrome: false,
                       ),
                     ),
+                    if (didDocumentUrl != null)
+                      IdentityProfileMetadataRow(
+                        key: const Key('profile-did-document-row'),
+                        label: context.l10n.profileDidDocumentLabel,
+                        showDivider:
+                            verificationMethods.isNotEmpty ||
+                            homepageUrl.isNotEmpty,
+                        child: IdentityProfileLinkValue(
+                          value: didDocumentUrl,
+                          actionLabel: context.l10n.profileOpenDidDocument,
+                          onTap: () => _openExternalUrl(didDocumentUrl),
+                        ),
+                      ),
+                    if (verificationMethods.isNotEmpty)
+                      IdentityProfileMetadataRow(
+                        key: const Key('profile-public-keys-row'),
+                        label: context.l10n.profilePublicKeysLabel,
+                        showDivider: homepageUrl.isNotEmpty,
+                        child: _PublicKeysSummaryValue(
+                          count: verificationMethods.length,
+                          onTap: () =>
+                              _showPublicKeys(context, verificationMethods),
+                        ),
+                      ),
                     if (homepageUrl.isNotEmpty)
                       IdentityProfileMetadataRow(
                         key: const Key('profile-homepage-metadata-row'),
@@ -347,14 +390,29 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     Navigator.of(context).maybePop();
   }
 
-  Future<void> _openHomepage(String homepageUrl) async {
-    final url = Uri.parse(homepageUrl);
-    final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+  Future<void> _openHomepage(String homepageUrl) =>
+      _openExternalUrl(homepageUrl);
+
+  Future<void> _openExternalUrl(String url) async {
+    final launched = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    );
     if (!launched && mounted) {
       ref
           .read(uiFeedbackProvider.notifier)
           .showError(AppMessage.linkOpenFailed());
     }
+  }
+
+  Future<void> _showPublicKeys(
+    BuildContext context,
+    List<IdentityVerificationMethod> methods,
+  ) {
+    return AppNavigator.showDialog<void>(
+      context,
+      (_) => _PublicKeysDialog(methods: methods),
+    );
   }
 
   Future<void> _showEditProfileDialog(
@@ -876,16 +934,24 @@ class _CompactMeCard extends StatelessWidget {
 class _CompactMeLinks extends StatelessWidget {
   const _CompactMeLinks({
     required this.homepageUrl,
+    required this.didDocumentUrl,
+    required this.publicKeyCount,
     required this.pendingDeviceRequests,
     required this.onDevicesTap,
     required this.onOpenHomepage,
+    required this.onOpenDidDocument,
+    required this.onOpenPublicKeys,
     required this.onSettingsTap,
   });
 
   final String homepageUrl;
+  final String? didDocumentUrl;
+  final int publicKeyCount;
   final int pendingDeviceRequests;
   final VoidCallback onDevicesTap;
   final VoidCallback onOpenHomepage;
+  final VoidCallback onOpenDidDocument;
+  final VoidCallback? onOpenPublicKeys;
   final VoidCallback onSettingsTap;
 
   @override
@@ -911,6 +977,21 @@ class _CompactMeLinks extends StatelessWidget {
               icon: CupertinoIcons.globe,
               title: l10n.profileHomepageLabel,
               onTap: onOpenHomepage,
+            ),
+          if (didDocumentUrl != null)
+            _CompactMeLink(
+              key: const Key('profile-did-document-row'),
+              icon: CupertinoIcons.doc_text,
+              title: l10n.profileDidDocumentLabel,
+              onTap: onOpenDidDocument,
+            ),
+          if (publicKeyCount > 0 && onOpenPublicKeys != null)
+            _CompactMeLink(
+              key: const Key('profile-public-keys-row'),
+              icon: CupertinoIcons.lock_shield,
+              title: l10n.profilePublicKeysLabel,
+              meta: l10n.profilePublicKeyCount(publicKeyCount),
+              onTap: onOpenPublicKeys!,
             ),
           _CompactMeLink(
             key: const Key('profile-settings-row'),
@@ -990,6 +1071,202 @@ class _CompactMeLink extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PublicKeysSummaryValue extends StatelessWidget {
+  const _PublicKeysSummaryValue({required this.count, required this.onTap});
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.awikiTheme;
+    final responsive = context.awikiResponsive;
+    final label = context.l10n.profilePublicKeyCount(count);
+    return AppPressable(
+      onTap: onTap,
+      semanticLabel: label,
+      borderRadius: BorderRadius.circular(
+        responsive.displayScaled(AwikiMeRadii.control),
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: responsive.bodyMd,
+                height: 1.35,
+                color: theme.primary,
+              ),
+            ),
+          ),
+          Icon(
+            CupertinoIcons.chevron_right,
+            size: responsive.iconSm,
+            color: theme.secondaryText,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PublicKeysDialog extends StatelessWidget {
+  const _PublicKeysDialog({required this.methods});
+
+  final List<IdentityVerificationMethod> methods;
+
+  @override
+  Widget build(BuildContext context) {
+    final responsive = context.awikiResponsive;
+    return AppDialogScaffold(
+      key: const Key('profile-public-keys-dialog'),
+      maxWidth: 560,
+      maxHeightFraction: 0.85,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          responsive.spacing(20),
+          responsive.spacing(16),
+          responsive.spacing(20),
+          responsive.spacing(20),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            AppDialogHeader(
+              title: context.l10n.profilePublicKeysTitle,
+              onClose: () => Navigator.of(context).pop(),
+            ),
+            SizedBox(height: responsive.spacing(12)),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    for (var index = 0; index < methods.length; index += 1) ...[
+                      if (index > 0) SizedBox(height: responsive.spacing(12)),
+                      _PublicKeyEntry(index: index, method: methods[index]),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PublicKeyEntry extends StatelessWidget {
+  const _PublicKeyEntry({required this.index, required this.method});
+
+  final int index;
+  final IdentityVerificationMethod method;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.awikiTheme;
+    final responsive = context.awikiResponsive;
+    final l10n = context.l10n;
+    final type = method.type.isEmpty ? '—' : method.type;
+    final purpose = method.relationships.isEmpty
+        ? '—'
+        : method.relationships.join(', ');
+    final multibase = method.publicKeyMultibase;
+    return Container(
+      key: Key('profile-public-key-$index'),
+      width: double.infinity,
+      padding: EdgeInsets.all(responsive.displayScaled(14)),
+      decoration: BoxDecoration(
+        color: theme.subtleSurface,
+        borderRadius: BorderRadius.circular(
+          responsive.displayScaled(AwikiMeRadii.md),
+        ),
+        border: Border.all(color: theme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            method.keyFragment,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: theme.title,
+              fontSize: responsive.bodyMd,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+          SizedBox(height: responsive.spacing(2)),
+          CopyableDidLine(
+            value: method.keyId,
+            copySemanticLabel: l10n.profilePublicKeyIdCopy,
+            copiedMessage: l10n.profilePublicKeyIdCopied,
+            maxLines: 2,
+            textStyle: TextStyle(
+              color: theme.tertiaryText,
+              fontSize: responsive.metaSm,
+              height: 1.35,
+            ),
+            buttonSize: responsive.displayScaled(26),
+            iconSize: responsive.displayScaled(12),
+            showButtonChrome: false,
+          ),
+          SizedBox(height: responsive.spacing(6)),
+          Text(
+            '${l10n.profilePublicKeyType}: $type',
+            style: TextStyle(
+              color: theme.secondaryText,
+              fontSize: responsive.bodySm,
+            ),
+          ),
+          Text(
+            '${l10n.profilePublicKeyPurpose}: $purpose',
+            style: TextStyle(
+              color: theme.secondaryText,
+              fontSize: responsive.bodySm,
+            ),
+          ),
+          SizedBox(height: responsive.spacing(6)),
+          Text(
+            l10n.profilePublicKeyValue,
+            style: TextStyle(
+              color: theme.secondaryText,
+              fontSize: responsive.metaSm,
+            ),
+          ),
+          if (multibase == null)
+            Text(
+              '—',
+              style: TextStyle(
+                color: theme.secondaryText,
+                fontSize: responsive.bodySm,
+              ),
+            )
+          else
+            CopyableDidLine(
+              value: multibase,
+              copySemanticLabel: l10n.profilePublicKeyCopy,
+              copiedMessage: l10n.profilePublicKeyCopied,
+              maxLines: 3,
+              textStyle: TextStyle(
+                color: theme.body,
+                fontSize: responsive.bodySm,
+                height: 1.35,
+              ),
+              buttonSize: responsive.displayScaled(26),
+              iconSize: responsive.displayScaled(12),
+              showButtonChrome: false,
+            ),
+        ],
       ),
     );
   }

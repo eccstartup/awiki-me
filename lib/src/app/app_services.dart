@@ -24,6 +24,7 @@ import '../application/directory_application_service.dart';
 import '../application/device_management_service.dart';
 import '../application/group_application_service.dart';
 import '../application/identity_export_service.dart';
+import '../application/identity_backup_import_service.dart';
 import '../application/messaging_service.dart';
 import '../application/message_sync_service.dart';
 import '../application/onboarding_service.dart';
@@ -36,6 +37,7 @@ import '../application/ports/device_management_core_port.dart';
 import '../application/ports/group_encryption_core_port.dart';
 import '../application/ports/identity_core_port.dart';
 import '../application/ports/identity_export_port.dart';
+import '../application/ports/identity_backup_import_port.dart';
 import '../application/ports/legacy_registry_epoch_adoption_port.dart';
 import '../application/ports/personal_agent_binding_port.dart';
 import '../application/ports/root_key_transfer_port.dart';
@@ -114,6 +116,18 @@ final identityDocumentCorePortProvider = Provider<IdentityDocumentCorePort>((
   throw StateError('identity_document_core_unavailable');
 });
 
+/// Public identity document projection for the Me tab. Fail-soft: a missing
+/// Core document only hides the public key entry, it never breaks the page.
+final identityDocumentSummaryProvider = FutureProvider.autoDispose
+    .family<IdentityDocumentSummary?, String>((ref, selector) async {
+      try {
+        final port = ref.watch(identityDocumentCorePortProvider);
+        return await port.identityDocument(selector);
+      } catch (_) {
+        return null;
+      }
+    });
+
 final deviceManagementCorePortProvider = Provider<DeviceManagementCorePort>(
   (ref) => throw UnimplementedError(
     'deviceManagementCorePortProvider must be overridden',
@@ -165,6 +179,19 @@ final identityExportServiceProvider = Provider<IdentityExportService>(
     userPresence: ref.watch(userPresencePortProvider),
   ),
 );
+
+final identityBackupImportPortProvider = Provider<IdentityBackupImportPort>(
+  (ref) => const UnsupportedIdentityBackupImportPort(),
+);
+
+final identityBackupImportServiceProvider =
+    Provider<IdentityBackupImportService>(
+      (ref) => IdentityBackupImportService(
+        importPort: ref.watch(identityBackupImportPortProvider),
+        attachmentPicker: ref.watch(attachmentPickerServiceProvider),
+        userPresence: ref.watch(userPresencePortProvider),
+      ),
+    );
 
 final deviceManagementServiceProvider = Provider<DeviceManagementService>(
   (ref) => DeviceManagementService(

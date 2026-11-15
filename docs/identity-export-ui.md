@@ -1,11 +1,14 @@
-# 身份备份导出（App 侧方案）
+# 身份备份导出与导入（App 侧方案）
 
-> 状态：App 编排、口令确认、保存链路与 Core 加密导出均已落地。
-> `im-core` 提供 `IdentityBackupPackage`（`AWIKIBK1` v1 容器，Argon2id + XChaCha20-Poly1305），
-> Dart SDK 通过 `exportIdentityBackup` 暴露，App 通过 `AwikiImCoreIdentityExportAdapter`
-> 覆盖 `identityExportPortProvider`。当前 onboarding 产生的 ANP 托管身份导出
-> root-control 私钥（`custody: "anp_root"`），设备签名/E2EE 密钥不可导出。
-> 导入/恢复 API 仍未实现。
+> 状态：App 编排、口令确认、系统认证、保存链路，Core 加密导出，以及 Core 校验/安装的
+> 加密导入均已落地。`im-core` 提供 `IdentityBackupPackage`（`AWIKIBK1` v1 容器，
+> Argon2id + XChaCha20-Poly1305），Dart SDK 通过 `exportIdentityBackup` /
+> `inspectIdentityBackup` / `importIdentityBackup` 暴露。App 通过
+> `AwikiImCoreIdentityExportAdapter` / `AwikiImCoreIdentityBackupImportAdapter` 分别覆盖
+> `identityExportPortProvider` / `identityBackupImportPortProvider`。当前 onboarding 产生的
+> ANP 托管身份导出和接受导入的都是 root-control 私钥（`custody: "anp_root"`），
+> 设备签名/E2EE 密钥不可导出，也不会从备份恢复。导入入口位于设置 → 安全，不在
+> onboarding 新增；导入只安装身份材料，不恢复消息、联系人或会话。
 >
 > 相关文档：[identity-secret-storage.md](identity-secret-storage.md)、
 > [storage-scope-vault-contract.md](storage-scope-vault-contract.md)、
@@ -26,8 +29,18 @@ DID 私钥材料，因此不能沿用历史实现中的明文 ZIP。
 | 读取或解析包内明文 | **App 禁止** |
 | 持有 DID 私钥、JWT、`SecretRef`、E2EE 私钥 | **App 禁止** |
 
-App 只接收一段不透明密文字节，并把这段字节交给平台保存面板。App 不解析容器、
-不读取内部 JSON、不把包内容写入日志或诊断。
+导入方向同样按这条边界拆分：
+
+| 能力 | 归属 |
+|---|---|
+| 选择备份文件、1 MiB 上限、单次内存读取、选后删除暂存副本 | App |
+| 解密、容器校验、返回 secret-free 摘要（DID/Handle/托管方式/时间） | Core |
+| 安装 root 私钥与 DID 文档、判定 `already_present` 与绑定冲突 | Core |
+| 摘要展示、高风险确认、`UserPresencePort`、会话围栏、导入后登出 | App |
+| 从备份恢复消息、联系人、会话、read state、JWT、设备 token | **双方都不做**（v1 显式排除） |
+
+App 只接收一段不透明密文字节：导出时交给平台保存面板，导入时只在内存中交给 Core。
+App 不解析容器、不读取内部 JSON、不把包内容写入日志或诊断。
 
 本方案不是 Root Key Transfer。`identity_vault_root`、设备管理根和管理权转移仍走
 [`root-key-transfer-ui.md`](root-key-transfer-ui.md)，不得塞进身份备份包。
@@ -46,9 +59,12 @@ awiki-credential-<handle>-<credential>-<timestamp>.zip
 
 它把 DID 私钥和 JWT 直接写入文件，任何拿到文件的人都可以完整冒充身份；同时 App
 需要读取 PEM，违反 secret ownership。该实现已禁用，不能作为新格式的兼容目标。
-旧 ZIP 也不应被新导入流程自动接受。
+新导入流程只接受 Core 解密校验通过的 `AWIKIBK1` v1 容器，且 v1 仅支持
+`custody == "anp_root"`；旧 ZIP、明文 PEM 或其他托管方式一律 fail closed。
 
 ## 3. 用户流程
+
+### 3.1 导出
 
 1. 设置 → 安全 → 导出身份凭证（现有入口）。
 2. App 弹出“导出加密身份备份”对话框：
@@ -68,7 +84,35 @@ awiki-credential-<handle>-<credential>-<timestamp>.zip
 - Core 契约要求同步复制口令字节，不得保留引用；
 - 口令、包内容、身份 DID 不进入日志、崩溃上报、E2E attestation 或诊断。
 
+### 3.2 导入
+
+1. 设置 → 安全 → 导入身份备份。入口只在已登录且 Core 端口支持时可用；未登录时
+   必须先通过统一登录/注册进入，不在 onboarding 新增导入入口。
+2. 打开“导入加密身份备份”对话框；选择文件走现有平台选择器
+   （`AttachmentPickerService.pickAttachment`），App 拒绝空文件和超过 1 MiB 的文件，
+   只读取一次，选后删除选择器暂存的应用内副本。
+3. 输入备份口令后点“检查备份”：Core 解密并校验容器，只返回 DID、Handle、
+   密钥托管方式、导出时间等摘要，**不改变本地状态**。
+4. 摘要展示后按钮变为高风险的“导入身份”，并提示：导入会把该身份的根密钥和
+   DID 文档安装到本设备；消息、联系人和会话不会被恢复；同时持有文件和口令的人
+   可以恢复此身份。
+5. 确认后调用系统身份认证（`UserPresencePort`）。拒绝、平台认证失败或登录身份
+   已变化时都不调用 Core。
+6. 认证通过后 Core 安装身份材料，返回 `identityId` / `did` / `rootKeyId` /
+   `alreadyPresent`。
+7. 若导入的正是当前登录身份（Core 返回 `alreadyPresent`），保留会话并提示
+   “该身份已存在于本设备且已登录”。否则 App 退出当前会话、重新读取本地凭证，
+   回到统一登录/注册并提示“导入成功，请选择该凭证登录”；用户按普通登录流程以该
+   凭证激活会话，导入路径本身不重建 tenant runtime。
+8. 关闭或取消对话框会把已选备份字节清零；失败时对话框保持打开并显示脱敏错误。
+
+导入口令与备份字节同样只存在于对话框和单次 Core 调用的内存中：服务层在每次 Core
+调用后清零口令副本，对话框在替换文件、关闭或导入完成时清零已选字节。App 不把备份
+写入磁盘（选择器的暂存副本读取后即删除），也不持久化口令或摘要。
+
 ## 4. Core 接口契约
+
+### 4.1 导出
 
 App 侧端口位于
 [`lib/src/application/ports/identity_export_port.dart`](../lib/src/application/ports/identity_export_port.dart)：
@@ -124,6 +168,92 @@ Future<IdentityBackupPackage> exportIdentityBackup(
   映射为 `identity_export.failed`，均不生成文件。
 - App 已在调用 Core 前完成 `UserPresencePort`；Core 在向 ANP identity store 请求
   root 导出时仍显式设置 `user_presence_confirmed: true`，该信任边界不变。
+
+### 4.2 导入
+
+App 侧端口位于
+[`lib/src/application/ports/identity_backup_import_port.dart`](../lib/src/application/ports/identity_backup_import_port.dart)：
+
+```dart
+class IdentityBackupSummary {
+  final String did;
+  final String? handle;
+  final String? fullHandle;
+  final String displayName;      // Core 取 credential_name
+  final String custody;          // v1 固定 "anp_root"
+  final String? createdAt;
+  final String exportedAt;
+  final String sourceCoreVersion;
+  final List<String> keyKinds;   // v1: ["did_document_root"]
+  final bool hasDidDocument;
+}
+
+class IdentityBackupImportOutcome {
+  final String identityId;       // 已安装或已存在的 exact local identity
+  final String did;
+  final String rootKeyId;
+  final bool alreadyPresent;
+}
+
+abstract interface class IdentityBackupImportPort {
+  bool get isSupported;
+  Future<IdentityBackupSummary> inspectIdentityBackup({
+    required Uint8List bytes,
+    required Uint8List passphrase,
+  });
+  Future<IdentityBackupImportOutcome> importIdentityBackup({
+    required Uint8List bytes,
+    required Uint8List passphrase,
+    required bool userPresenceConfirmed,
+  });
+}
+```
+
+`UnsupportedIdentityBackupImportPort` 是默认实现，`isSupported == false` 时在打开
+选择器前直接失败。`AppBootstrap` 装配 Core runtime 时创建
+[`AwikiImCoreIdentityBackupImportAdapter`](../lib/src/data/im_core/awiki_im_core_identity_backup_import_adapter.dart)，
+经 `awiki_me_app.dart` 覆盖 `identityBackupImportPortProvider`。
+
+Core 必须：
+
+1. 只接受 `AWIKIBK1` v1 且 `custody == "anp_root"` 的备份；其他版本/托管方式返回
+   typed 错误（`identity_backup_unsupported_version` /
+   `identity_backup_unsupported_custody`），不写任何状态。payload 还要求 DID 以
+   `did:wba:` 开头、`did_document.id` 等于该 DID、`proof.verificationMethod` 存在，
+   且只携带 root PEM（出现设备签名/E2EE 字段即 `identity_backup_payload_invalid`）。
+2. `inspectIdentityBackup` 无副作用，只返回 secret-free 摘要；App 只展示，
+   不把摘要写入持久化存储或诊断。
+3. `importIdentityBackup` 必须收到 `user_presence_confirmed == true`，否则
+   `permission_denied`；App 侧拒绝、取消或平台认证失败都不会走到这里。
+4. 已存在同 DID 的 ANP 身份时，校验公钥身份一致后返回 `already_present: true`，
+   不覆盖本地数据；同 DID 但非 ANP 托管、或本地 identity ID 已绑定其他 DID 时返回
+   `identity_binding_conflict`。
+5. 只安装 root 私钥与 DID 文档；消息、联系人、会话、read state、JWT、device token、
+   MLS 设备态、PreKey 和 product overlay 均不恢复，也不写入。
+6. 失败时不得留下部分身份或部分密钥材料。
+7. 导入的身份只具备 root 材料，设备 readiness 为 `root_only`；App 的 runtime 启动
+   检查必须接受 `root_only`（同时仍要求 ANP custody active/ready），否则导入后无法
+   登录。设备签名/E2EE 密钥由后续正常登录/注册流程产生，不来自备份。
+
+App 服务层顺序固定（[`identity_backup_import_service.dart`](../lib/src/application/identity_backup_import_service.dart)）：
+
+1. 端口不支持 → `identity_backup_import.unsupported`（选择文件前）；
+2. 选择器取消 → 返回 `null`，不提示错误；
+3. 选择器异常 → `identity_backup_import.read_failed`；
+4. 声明或实际大小 > 1 MiB → `identity_backup_import.too_large`，已读字节清零；
+5. 空文件 / 非普通文件 → `identity_backup_import.invalid_file`；
+6. 空口令 → `identity_backup_import.passphrase_required`；
+7. presence reason 为空 → `identity_backup_import.invalid_presence_reason`；
+   `UserPresencePort` 返回 false → `user_presence_denied`；抛错 →
+   `user_presence_failed`；三种情况都**不调用 Core**；
+8. `SessionEpoch` 已变化 → `identity_backup_import.state_changed`，**不调用 Core**；
+9. Core 的 `identity_backup_*` 稳定码原样透传；能力缺失映射为
+   `identity_backup_import.unsupported`，`permission_denied` → `.denied`，
+   `identity_binding_conflict` → `.conflict`；其余 inspect/import 异常分别映射为
+   `.inspect_failed` / `.failed`。
+
+导入不修改 product store，不删除或重写现有 owner 数据；唯一的状态变化来自 Core
+安装的新身份材料。桌面端的三套响应式设置布局共用同一入口与同一弹窗。
 
 ## 5. v1 容器格式（Core 权威，已实现）
 
@@ -210,6 +340,10 @@ ANP 托管身份只导出 `did_document_root_private_pem`：Core 从 ANP identit
 一致的 PEM 形状；`identity.custody == "anp_root"`，设备签名/E2EE 字段省略。
 设备签名与 E2EE 私钥属于设备作用域，按设计不可导出，新设备重新注册。
 
+导入 v1 只接受 `custody == "anp_root"` 的包；`vnext`、legacy 或任何携带额外设备
+密钥的包即使能解密，也会以 `identity_backup_unsupported_custody` fail closed，
+直到 Core 以新的 schema 版本显式扩展并单独评审。
+
 `handle`/`full_handle`/`created_at` 在缺失时省略；`credential_name` 取 local alias，
 否则退回 local identity id。`did_document` 来自身份目录中的 `did_document.json`/`did.json`，
 缺失时省略。vault/file-compat 路径上必需材料缺失时按 `identity_not_ready` 失败，
@@ -250,8 +384,14 @@ mimeType: application/vnd.awiki.identity-backup
 | `lib/src/presentation/app_shell/providers/app_runtime_provider.dart` | 捕获 `SessionEpoch`、调用 service、映射稳定错误码到 UI 反馈 |
 | `lib/src/app/bootstrap.dart` / `awiki_me_app.dart` | 在 Core runtime 装配处创建适配器并覆盖 `identityExportPort` |
 | `lib/src/app/app_services.dart` | `identityExportPortProvider` / `identityExportServiceProvider`（默认 `UnsupportedIdentityExportPort`） |
+| `lib/src/application/ports/identity_backup_import_port.dart` | 摘要、导入结果、typed 异常与默认 fail-closed 端口 |
+| `lib/src/data/im_core/awiki_im_core_identity_backup_import_adapter.dart` | 调用 Core `inspectIdentityBackup` / `importIdentityBackup`，映射能力/权限/冲突错误 |
+| `lib/src/application/identity_backup_import_service.dart` | 文件选择与 1 MiB 上限、单次读取、口令编码/清零、presence、session 围栏、Core 调用 |
+| `lib/src/presentation/settings/identity_backup_import_dialog.dart` | 两阶段确认：检查备份 → 核对摘要 → 高风险导入 |
+| `settings_page.dart` / `app_runtime_provider.dart` | 三套响应式入口打开同一弹窗；`already_present` 保留会话，否则登出并重新加载本地凭证 |
+| `lib/src/app/app_services.dart`（导入） | `identityBackupImportPortProvider` / `identityBackupImportServiceProvider`（默认 `UnsupportedIdentityBackupImportPort`） |
 
-服务层顺序固定：
+导出服务层顺序固定：
 
 1. 端口不支持 → `identity_export.unsupported`；
 2. 无 exact identity → `identity_export.no_identity`；
@@ -275,8 +415,25 @@ mimeType: application/vnd.awiki.identity-backup
 | `identity_export.state_changed` | “当前登录身份已变化，导出已取消” |
 | `identity_export.invalid_package` / `failed` / `save_failed` | 通用导出失败提示 |
 
+导入错误码与 UI：
+
+| 错误码 | UI |
+|---|---|
+| `identity_backup_import.unsupported` | “当前版本暂不支持导入身份备份。” |
+| `identity_backup_import.invalid_file` / `identity_backup_bad_magic` / `identity_backup_unsupported_version` / `identity_backup_payload_invalid` | “该文件不是有效的身份备份。” |
+| `identity_backup_import.too_large` / `identity_backup_too_large` | “备份文件超过 1 MB。” |
+| `identity_backup_import.passphrase_required` / `identity_backup_bad_passphrase` | “口令错误或备份已损坏。” |
+| `identity_backup_unsupported_custody` | “暂不支持该备份的密钥托管方式。” |
+| `identity_backup_import.conflict` | “该身份与本机已有身份数据冲突。” |
+| `identity_backup_import.user_presence_denied` / `user_presence_failed` | “身份验证已取消，未导入任何内容。” |
+| `identity_backup_import.state_changed` | “当前登录身份已变化，导入已取消。” |
+| `identity_backup_import.read_failed` / `inspect_failed` / `failed` | 通用导入失败提示 |
+
+成功路径：`alreadyPresent` 且导入的正是当前身份时提示“该身份已存在于本设备且已
+登录”；其余成功路径提示“导入成功，请选择该凭证登录”，随后回到统一登录/注册。
+
 错误只包含稳定 code、stage、count、时间；不包含异常正文、身份、路径或包内容。
-用户取消系统认证或保存面板属于正常路径，不按错误上报。
+用户取消系统认证、保存面板或文件选择器属于正常路径，不按错误上报。
 
 ## 8. 测试
 
@@ -302,6 +459,29 @@ Widget：设置页点击入口打开弹窗；口令过短、两次不一致时�
 - `unsupported_capability` + `identity_backup.*` → `identity_export.unsupported`；
 - 其他 Core 错误 → `identity_export.failed`。
 
+导入 App 侧（`tests/unit/application/identity_backup_import_service_test.dart`、
+`tests/unit/data/im_core/awiki_im_core_identity_backup_import_adapter_test.dart`、
+`tests/unit/identity_backup_import_dialog_test.dart`，以及
+`tests/unit/settings_page_test.dart` 的入口接线）：
+
+- 端口不支持时在选择文件前失败；选择器取消返回 `null`；
+- 声明大小与实际大小超过 1 MiB 都拒绝；路径文件只读一次且选后删除；空文件拒绝；
+- 口令以 UTF-8 传给 Core，调用后临时字节清零；空口令不调用 Core；
+- Core `identity_backup_*` 稳定码透传；能力缺失、`permission_denied`、
+  `identity_binding_conflict` 映射为 App 稳定码；
+- presence 拒绝、平台异常、reason 为空、session 变化时不调用 Core import；
+- 成功路径把同一引用字节与口令交给 Core，且 `userPresenceConfirmed == true`；
+- 对话框先检查再导入，摘要展示 DID/Handle/托管方式/导出时间，二次确认才调用导入；
+- 关闭对话框清零已选字节；失败保留对话框与脱敏错误；Core 不支持时失败关闭；
+- 设置页在 Core 支持且已登录时可打开导入对话框，未登录时入口不可用。
+
+适配器导入（`awiki_im_core_identity_backup_import_adapter_test.dart`）：
+
+- 传入同一 `bytes` / `passphrase` 引用与 `userPresenceConfirmed`；
+- 摘要与结果字段映射完整；
+- `unsupported_capability` + `identity_backup.*` → `identity_backup_import.unsupported`；
+- 其他 Core 错误按 inspect/import 分别映射为 `.inspect_failed` / `.failed`。
+
 Core（`crates/im-core/src/internal/identity_backup.rs`，Rust unit tests）：
 
 - 密封→解密 round-trip，payload 字段与 schema 一致；
@@ -317,6 +497,14 @@ Core（`crates/im-core/src/identity/registry.rs`，Rust 集成测试）：
 - 注入 workspace root key 创建的真实 ANP 身份：导出包解密后
   `custody == "anp_root"`、无设备签名/E2EE 字段，root PEM 解码后的 DER
   等于 ANP identity store 导出的 root-control PKCS#8。
+- `inspect_identity_backup` 错误口令时返回 `identity_backup_bad_passphrase`，
+  且目标 root 的 identity registry 仍为空。
+- `import_identity_backup` 未确认 user presence 时返回 `permission_denied`，
+  不写任何身份。
+- 导入到 fresh root 后：摘要与源的 DID/Handle/root 材料一致，身份 readiness 为
+  `root_only`，custody 为 ANP identity 且 ready，且没有 auth token；重复导入返回
+  `already_present` 且不覆盖本地数据。
+- 部分安装（registry 投影丢失）后再次导入能完成投影并保持同一 identity ID。
 
 Core/跨端（待实现）：
 
@@ -331,19 +519,36 @@ Core/跨端（待实现）：
    已完成：`ImCore::export_identity_backup(_async)` + FRB `exportIdentityBackup`。
 2. ~~App：新增 `AwikiImCoreIdentityExportAdapter`，覆盖 `identityExportPortProvider`。~~
    已完成：`AppBootstrap` 装配并透传到 `AwikiMeApp`。
-3. 恢复：为 `importCredentialArchive` 增加对应的 Core import API 与专用 UI；在此之前
-   导入入口继续保持不可用。
+3. ~~恢复：为 `importCredentialArchive` 增加对应的 Core import API 与专用 UI；在此之前
+   导入入口继续保持不可用。~~
+   已完成，实际落点与草案不同：
+   - Core：`inspectIdentityBackup` / `importIdentityBackup`（`AWIKIBK1` v1，仅
+     `custody == "anp_root"`，导入后 readiness 为 `root_only`）；
+   - App：`IdentityBackupImportService` +
+     `AwikiImCoreIdentityBackupImportAdapter` + `IdentityBackupImportDialog`；
+     入口位于设置 → 安全，未新增 onboarding 入口；
+   - 没有沿用旧 `importCredentialArchive` / 明文 ZIP 路径；
+   - 导入成功后不做 tenant runtime 重建：Core 已在当前 runtime 内完成身份注册。
+     若导入的是当前身份（`alreadyPresent`）则保留会话；否则退出当前会话、
+     重新读取本地凭证并回到统一登录，由用户以新凭证正常登录。
 4. E2E：在 `tests/e2e/` 增加 secret-free attestation，只记录“导出成功/大小/版本/
-   恢复后 ID 连续性”，不记录口令、私钥或包内容。
+   恢复后 ID 连续性”，不记录口令、私钥或包内容。**尚未实现**：当前只有 Rust、
+   service/adapter 与 widget 覆盖，没有 `identity-backup-import` E2E case，
+   也没有更新 `docs/test-case-catalog.md`；真实 root 上的导出 → 新 root 导入
+   continuity 仍待评审后补齐。
 5. 平台：复用现有 `saveAttachment`（macOS `NSSavePanel`、iOS `UIDocumentPicker`），
    不新增平台通道；Android/Windows/Linux 按现有保存能力逐步开放。
 
 ## 10. 安全红线
 
-- 不恢复明文 ZIP、PEM、`auth.json` 或任何未加密的私钥导出。
-- 不允许 App 读取、解析或重新打包 Core 的密文。
-- 不允许在没有 `UserPresencePort` 成功确认时调用 Core。
+- 不恢复明文 ZIP、PEM、`auth.json` 或任何未加密的私钥导出；导入只接受 Core
+  校验通过的 `AWIKIBK1` v1 且仅 `custody == "anp_root"`。
+- 不允许 App 读取、解析或重新打包 Core 的密文；导入也只消费 Core 返回的摘要。
+- 不允许在没有 `UserPresencePort` 成功确认时调用 Core 导出或导入。
 - 不允许把口令写入 `ProductLocalStore`、Keychain、日志、剪贴板或 URL。
-- 不允许用 Handle、DID、credentialName 猜 exact identity。
+- 不允许用 Handle、DID、credentialName 猜 exact identity；导入只按备份内携带的
+  identity 安装，`alreadyPresent` 由 Core 按 DID/公钥身份判定。
 - 不允许把身份备份当作 Root Key Transfer 或管理权转移。
+- 不允许把导入描述成消息、联系人、会话或 read state 的恢复。
 - 不允许在 Core 返回失败时回退到“仅导出公开资料”并宣称成功。
+- 不允许在备份字节未通过 1 MiB 上限与 Core 校验时写入任何身份状态。

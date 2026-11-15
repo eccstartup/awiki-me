@@ -972,6 +972,44 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileOpenHomepage => '打开主页';
 
   @override
+  String get profileDidDocumentLabel => 'DID 文档';
+
+  @override
+  String get profileOpenDidDocument => '打开 DID 文档';
+
+  @override
+  String get profilePublicKeysLabel => '公钥';
+
+  @override
+  String get profilePublicKeysTitle => '身份公钥';
+
+  @override
+  String profilePublicKeyCount(int count) {
+    return '$count 个公钥';
+  }
+
+  @override
+  String get profilePublicKeyType => '类型';
+
+  @override
+  String get profilePublicKeyPurpose => '用途';
+
+  @override
+  String get profilePublicKeyValue => 'publicKeyMultibase';
+
+  @override
+  String get profilePublicKeyCopy => '复制公钥';
+
+  @override
+  String get profilePublicKeyCopied => '公钥已复制';
+
+  @override
+  String get profilePublicKeyIdCopy => '复制 Key ID';
+
+  @override
+  String get profilePublicKeyIdCopied => 'Key ID 已复制';
+
+  @override
   String get settingsTitle => '设置';
 
   @override
@@ -1406,6 +1444,100 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get identityExportHelperMessage => '请分开保管文件和口令。同时持有两者的人可以恢复此身份。';
+
+  @override
+  String get settingsImportIdentityBackup => '导入身份备份';
+
+  @override
+  String get identityBackupImportDialogTitle => '导入加密身份备份';
+
+  @override
+  String get identityBackupImportDialogMessage =>
+      '选择 AWiki 身份备份文件并输入口令。在确认备份内容之前不会导入任何内容。';
+
+  @override
+  String get identityBackupImportReviewMessage => '导入前请核对以下身份信息。';
+
+  @override
+  String get identityBackupImportHelperMessage => '确认之前，备份始终保持加密。';
+
+  @override
+  String get identityBackupImportWarning =>
+      '导入会把该身份的根密钥和 DID 文档安装到本设备。消息、联系人和会话不会被恢复。同时持有文件和口令的人可以恢复此身份。';
+
+  @override
+  String get identityBackupImportSelectFile => '选择备份文件';
+
+  @override
+  String identityBackupImportSelectedFile(Object fileName) {
+    return '已选择：$fileName';
+  }
+
+  @override
+  String get identityBackupImportNoFile => '请先选择备份文件。';
+
+  @override
+  String get identityBackupImportPassphraseLabel => '备份口令';
+
+  @override
+  String get identityBackupImportPassphrasePlaceholder => '导出时使用的口令';
+
+  @override
+  String get identityBackupImportPassphraseRequired => '请输入备份口令。';
+
+  @override
+  String get identityBackupImportInspectAction => '检查备份';
+
+  @override
+  String get identityBackupImportConfirmAction => '导入身份';
+
+  @override
+  String get identityBackupImportDidLabel => 'DID';
+
+  @override
+  String get identityBackupImportHandleLabel => 'Handle';
+
+  @override
+  String get identityBackupImportCustodyLabel => '密钥托管';
+
+  @override
+  String get identityBackupImportCustodyAnpRoot => 'ANP 根密钥';
+
+  @override
+  String get identityBackupImportExportedAtLabel => '导出时间';
+
+  @override
+  String get identityBackupImportPresenceReason => '请验证身份以导入加密身份备份。';
+
+  @override
+  String get identityBackupImportUnsupported => '当前版本暂不支持导入身份备份。';
+
+  @override
+  String get identityBackupImportInvalidFile => '该文件不是有效的身份备份。';
+
+  @override
+  String get identityBackupImportTooLarge => '备份文件超过 1 MB。';
+
+  @override
+  String get identityBackupImportBadPassphrase => '口令错误或备份已损坏。';
+
+  @override
+  String get identityBackupImportUnsupportedCustody => '暂不支持该备份的密钥托管方式。';
+
+  @override
+  String get identityBackupImportConflict => '该身份与本机已有身份数据冲突。';
+
+  @override
+  String get identityBackupImportUserPresenceDenied => '身份验证已取消，未导入任何内容。';
+
+  @override
+  String get identityBackupImportStateChanged => '当前登录身份已变化，导入已取消。';
+
+  @override
+  String get identityBackupImportFailed => '无法导入身份备份。';
+
+  @override
+  String get identityBackupImportAlreadyPresent => '该身份已存在于本设备且已登录。';
 
   @override
   String get messageSyncStatusTitle => '消息同步';

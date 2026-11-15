@@ -52,6 +52,43 @@ class IdentityServicesSnapshot {
   final bool pending;
 }
 
+/// One public key entry of the current identity document.
+///
+/// [relationships] are the top-level DID document relationship names that
+/// authorize this key (`authentication`, `assertionMethod`, `keyAgreement`,
+/// ...). Public material only; Core remains the single identity source.
+class IdentityVerificationMethod {
+  const IdentityVerificationMethod({
+    required this.keyId,
+    required this.type,
+    required this.relationships,
+    this.publicKeyMultibase,
+  });
+
+  final String keyId;
+  final String type;
+  final List<String> relationships;
+  final String? publicKeyMultibase;
+
+  String get keyFragment {
+    final index = keyId.lastIndexOf('#');
+    if (index < 0 || index + 1 >= keyId.length) {
+      return keyId;
+    }
+    return keyId.substring(index + 1);
+  }
+}
+
+class IdentityDocumentSummary {
+  const IdentityDocumentSummary({
+    required this.did,
+    required this.verificationMethods,
+  });
+
+  final String did;
+  final List<IdentityVerificationMethod> verificationMethods;
+}
+
 class PendingIdentityRegistration {
   const PendingIdentityRegistration({
     required this.did,

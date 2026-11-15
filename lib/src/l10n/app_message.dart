@@ -176,6 +176,36 @@ class AppMessage {
   factory AppMessage.identityExportFailed() =>
       const AppMessage._('identityExportFailed');
 
+  factory AppMessage.identityBackupImportUnsupported() =>
+      const AppMessage._('identityBackupImportUnsupported');
+
+  factory AppMessage.identityBackupImportInvalidFile() =>
+      const AppMessage._('identityBackupImportInvalidFile');
+
+  factory AppMessage.identityBackupImportTooLarge() =>
+      const AppMessage._('identityBackupImportTooLarge');
+
+  factory AppMessage.identityBackupImportBadPassphrase() =>
+      const AppMessage._('identityBackupImportBadPassphrase');
+
+  factory AppMessage.identityBackupImportUnsupportedCustody() =>
+      const AppMessage._('identityBackupImportUnsupportedCustody');
+
+  factory AppMessage.identityBackupImportConflict() =>
+      const AppMessage._('identityBackupImportConflict');
+
+  factory AppMessage.identityBackupImportUserPresenceDenied() =>
+      const AppMessage._('identityBackupImportUserPresenceDenied');
+
+  factory AppMessage.identityBackupImportStateChanged() =>
+      const AppMessage._('identityBackupImportStateChanged');
+
+  factory AppMessage.identityBackupImportFailed() =>
+      const AppMessage._('identityBackupImportFailed');
+
+  factory AppMessage.identityBackupImportAlreadyPresent() =>
+      const AppMessage._('identityBackupImportAlreadyPresent');
+
   factory AppMessage.credentialPackFailed() =>
       const AppMessage._('credentialPackFailed');
 
@@ -578,6 +608,26 @@ class AppMessage {
         return l10n.identityExportStateChanged;
       case 'identityExportFailed':
         return l10n.identityExportFailed;
+      case 'identityBackupImportUnsupported':
+        return l10n.identityBackupImportUnsupported;
+      case 'identityBackupImportInvalidFile':
+        return l10n.identityBackupImportInvalidFile;
+      case 'identityBackupImportTooLarge':
+        return l10n.identityBackupImportTooLarge;
+      case 'identityBackupImportBadPassphrase':
+        return l10n.identityBackupImportBadPassphrase;
+      case 'identityBackupImportUnsupportedCustody':
+        return l10n.identityBackupImportUnsupportedCustody;
+      case 'identityBackupImportConflict':
+        return l10n.identityBackupImportConflict;
+      case 'identityBackupImportUserPresenceDenied':
+        return l10n.identityBackupImportUserPresenceDenied;
+      case 'identityBackupImportStateChanged':
+        return l10n.identityBackupImportStateChanged;
+      case 'identityBackupImportFailed':
+        return l10n.identityBackupImportFailed;
+      case 'identityBackupImportAlreadyPresent':
+        return l10n.identityBackupImportAlreadyPresent;
       case 'credentialPackFailed':
         return l10n.credentialPackFailed;
       case 'localCredentialDirectoryMissing':
@@ -707,6 +757,26 @@ class AppMessage {
         return 'Your signed-in identity changed. Export was cancelled.';
       case 'identityExportFailed':
         return 'Could not create the encrypted identity backup.';
+      case 'identityBackupImportUnsupported':
+        return 'Identity backup import is not available in this build.';
+      case 'identityBackupImportInvalidFile':
+        return 'This file is not a valid identity backup.';
+      case 'identityBackupImportTooLarge':
+        return 'The backup file is larger than 1 MB.';
+      case 'identityBackupImportBadPassphrase':
+        return 'The passphrase is incorrect or the backup is damaged.';
+      case 'identityBackupImportUnsupportedCustody':
+        return "This backup's key custody is not supported yet.";
+      case 'identityBackupImportConflict':
+        return 'This identity conflicts with existing local identity data.';
+      case 'identityBackupImportUserPresenceDenied':
+        return 'Identity verification was cancelled. Nothing was imported.';
+      case 'identityBackupImportStateChanged':
+        return 'Your signed-in identity changed. Import was cancelled.';
+      case 'identityBackupImportFailed':
+        return 'Could not import the identity backup.';
+      case 'identityBackupImportAlreadyPresent':
+        return 'This identity is already on this device and is signed in.';
       case 'otpSent':
         return 'Verification code sent. Please check your messages.';
       case 'otpRateLimited':

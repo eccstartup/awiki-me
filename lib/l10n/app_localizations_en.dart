@@ -1019,6 +1019,44 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileOpenHomepage => 'Open homepage';
 
   @override
+  String get profileDidDocumentLabel => 'DID document';
+
+  @override
+  String get profileOpenDidDocument => 'Open DID document';
+
+  @override
+  String get profilePublicKeysLabel => 'Public keys';
+
+  @override
+  String get profilePublicKeysTitle => 'Identity public keys';
+
+  @override
+  String profilePublicKeyCount(int count) {
+    return '$count public keys';
+  }
+
+  @override
+  String get profilePublicKeyType => 'Type';
+
+  @override
+  String get profilePublicKeyPurpose => 'Purpose';
+
+  @override
+  String get profilePublicKeyValue => 'publicKeyMultibase';
+
+  @override
+  String get profilePublicKeyCopy => 'Copy public key';
+
+  @override
+  String get profilePublicKeyCopied => 'Public key copied';
+
+  @override
+  String get profilePublicKeyIdCopy => 'Copy key ID';
+
+  @override
+  String get profilePublicKeyIdCopied => 'Key ID copied';
+
+  @override
   String get settingsTitle => 'Settings';
 
   @override
@@ -1488,6 +1526,116 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get identityExportHelperMessage =>
       'Store the file and passphrase separately. Anyone with both can restore this identity.';
+
+  @override
+  String get settingsImportIdentityBackup => 'Import identity backup';
+
+  @override
+  String get identityBackupImportDialogTitle =>
+      'Import encrypted identity backup';
+
+  @override
+  String get identityBackupImportDialogMessage =>
+      'Choose an AWiki identity backup file and enter its passphrase. Nothing is installed until you review the backup contents.';
+
+  @override
+  String get identityBackupImportReviewMessage =>
+      'Review this identity before importing it.';
+
+  @override
+  String get identityBackupImportHelperMessage =>
+      'The backup stays encrypted until you confirm.';
+
+  @override
+  String get identityBackupImportWarning =>
+      'Import installs this identity\'s root key and DID document on this device. Messages, contacts and conversations are not restored. Anyone with this file and passphrase can restore the identity.';
+
+  @override
+  String get identityBackupImportSelectFile => 'Choose backup file';
+
+  @override
+  String identityBackupImportSelectedFile(Object fileName) {
+    return 'Selected: $fileName';
+  }
+
+  @override
+  String get identityBackupImportNoFile => 'Choose a backup file first.';
+
+  @override
+  String get identityBackupImportPassphraseLabel => 'Backup passphrase';
+
+  @override
+  String get identityBackupImportPassphrasePlaceholder =>
+      'Passphrase used when exporting';
+
+  @override
+  String get identityBackupImportPassphraseRequired =>
+      'Enter the backup passphrase.';
+
+  @override
+  String get identityBackupImportInspectAction => 'Inspect backup';
+
+  @override
+  String get identityBackupImportConfirmAction => 'Import identity';
+
+  @override
+  String get identityBackupImportDidLabel => 'DID';
+
+  @override
+  String get identityBackupImportHandleLabel => 'Handle';
+
+  @override
+  String get identityBackupImportCustodyLabel => 'Key custody';
+
+  @override
+  String get identityBackupImportCustodyAnpRoot => 'ANP root key';
+
+  @override
+  String get identityBackupImportExportedAtLabel => 'Exported';
+
+  @override
+  String get identityBackupImportPresenceReason =>
+      'Confirm your identity to import an encrypted identity backup.';
+
+  @override
+  String get identityBackupImportUnsupported =>
+      'Identity backup import is not available in this build.';
+
+  @override
+  String get identityBackupImportInvalidFile =>
+      'This file is not a valid identity backup.';
+
+  @override
+  String get identityBackupImportTooLarge =>
+      'The backup file is larger than 1 MB.';
+
+  @override
+  String get identityBackupImportBadPassphrase =>
+      'The passphrase is incorrect or the backup is damaged.';
+
+  @override
+  String get identityBackupImportUnsupportedCustody =>
+      'This backup\'s key custody is not supported yet.';
+
+  @override
+  String get identityBackupImportConflict =>
+      'This identity conflicts with existing local identity data.';
+
+  @override
+  String get identityBackupImportUserPresenceDenied =>
+      'Identity verification was cancelled. Nothing was imported.';
+
+  @override
+  String get identityBackupImportStateChanged =>
+      'Your signed-in identity changed. Import was cancelled.';
+
+  @override
+  String get identityBackupImportFailed =>
+      'Could not import the identity backup.';
+
+  @override
+  String get identityBackupImportAlreadyPresent =>
+      'This identity is already on this device and is signed in.';
 
   @override
   String get messageSyncStatusTitle => 'Message sync';

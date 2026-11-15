@@ -32,6 +32,7 @@ import 'notify_settings.dart';
 import '../shared/display_scale.dart';
 import '../shared/local_credential_delete_dialog.dart';
 import 'identity_export_dialog.dart';
+import 'identity_backup_import_dialog.dart';
 
 enum SettingsDetail { devices, language, display }
 
@@ -63,6 +64,9 @@ class SettingsPage extends ConsumerWidget {
                 ?.handleRecovery ==
             true;
     final runtime = ref.read(appRuntimeProvider.notifier);
+    final supportsIdentityBackupImport = ref
+        .watch(identityBackupImportServiceProvider)
+        .isSupported;
     final updateState = ref.watch(appUpdateProvider);
     final activeTenant = ref.watch(activeAppTenantProvider);
     final localeMode = ref.watch(appLocaleModeProvider);
@@ -274,6 +278,17 @@ class SettingsPage extends ConsumerWidget {
           ),
           const AppSectionDivider(),
           AppListTile(
+            key: const Key('settings-import-identity-backup-row'),
+            title: l10n.settingsImportIdentityBackup,
+            leading: leading(
+              const _SettingsIcon(icon: CupertinoIcons.arrow_up_to_line),
+            ),
+            onTap: session == null || !supportsIdentityBackupImport
+                ? null
+                : () => _showImportIdentityBackupDialog(context, ref, runtime),
+          ),
+          const AppSectionDivider(),
+          AppListTile(
             title: l10n.settingsLogout,
             leading: leading(const _SettingsIcon(role: AwikiMeIconRole.logout)),
             onTap: () => _showLogoutDialog(context, runtime),
@@ -429,6 +444,17 @@ class SettingsPage extends ConsumerWidget {
                     ),
             ),
             _DesktopSettingsRow(
+              key: const Key('settings-import-identity-backup-row'),
+              title: l10n.settingsImportIdentityBackup,
+              onTap: session == null || !supportsIdentityBackupImport
+                  ? null
+                  : () => _showImportIdentityBackupDialog(
+                      context,
+                      ref,
+                      runtime,
+                    ),
+            ),
+            _DesktopSettingsRow(
               key: const Key('settings-logout-row'),
               title: l10n.settingsLogout,
               onTap: () => _showLogoutDialog(context, runtime),
@@ -473,7 +499,9 @@ class SettingsPage extends ConsumerWidget {
       final compactContentHeight =
           MediaQuery.sizeOf(context).height -
           MediaQuery.paddingOf(context).vertical;
-      final useShortViewportMetrics = compactContentHeight < 820;
+      // Four security actions (recover, export, import, logout/delete) no
+      // longer fit a zero-inset 844-high viewport at the tall rhythm.
+      final useShortViewportMetrics = compactContentHeight < 860;
       // Glass groups add their own insets, so rows follow the reference's
       // tighter 48-52 unit settings rhythm to keep every action on screen.
       final profileHeight = useShortViewportMetrics ? 76.0 : 84.0;
@@ -647,6 +675,20 @@ class SettingsPage extends ConsumerWidget {
                     ),
             ),
             _QuietSettingsRow(
+              key: const Key('settings-import-identity-backup-row'),
+              icon: CupertinoIcons.arrow_up_to_line,
+              iconKey: const Key('settings-import-identity-backup-icon'),
+              title: l10n.settingsImportIdentityBackup,
+              height: optionRowHeight,
+              onTap: session == null || !supportsIdentityBackupImport
+                  ? null
+                  : () => _showImportIdentityBackupDialog(
+                      context,
+                      ref,
+                      runtime,
+                    ),
+            ),
+            _QuietSettingsRow(
               key: const Key('settings-logout-row'),
               icon: CupertinoIcons.square_arrow_right,
               iconKey: const Key('settings-logout-icon'),
@@ -812,6 +854,29 @@ class SettingsPage extends ConsumerWidget {
       (_) => IdentityExportDialog(
         identityLabel: identityLabel,
         onExport: (passphrase) => runtime.exportCurrentCredential(
+          passphrase: passphrase,
+          presenceReason: presenceReason,
+        ),
+      ),
+    );
+  }
+
+  void _showImportIdentityBackupDialog(
+    BuildContext context,
+    WidgetRef ref,
+    AppRuntimeController runtime,
+  ) {
+    final presenceReason = context.l10n.identityBackupImportPresenceReason;
+    final service = ref.read(identityBackupImportServiceProvider);
+    AppNavigator.showDialog<void>(
+      context,
+      (_) => IdentityBackupImportDialog(
+        isSupported: service.isSupported,
+        pickBackup: service.pickBackupFile,
+        inspectBackup: (backup, passphrase) =>
+            service.inspectBackup(backup: backup, passphrase: passphrase),
+        importBackup: (backup, passphrase) => runtime.importIdentityBackup(
+          backup: backup,
           passphrase: passphrase,
           presenceReason: presenceReason,
         ),

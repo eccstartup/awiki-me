@@ -117,6 +117,15 @@ class AwikiImCoreIdentityAdapter
   }
 
   @override
+  Future<IdentityDocumentSummary> identityDocument(String selector) async {
+    final instance = await _coreInstance();
+    final document = await instance.identityDocument(
+      _selectorFromString(selector),
+    );
+    return identityDocumentSummaryFromCore(document);
+  }
+
+  @override
   Future<IdentityServicesSnapshot> identityServices(String selector) async {
     final instance = await _coreInstance();
     final identity = _selectorFromString(selector);

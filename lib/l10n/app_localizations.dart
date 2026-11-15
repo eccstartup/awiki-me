@@ -1928,6 +1928,78 @@ abstract class AppLocalizations {
   /// **'打开主页'**
   String get profileOpenHomepage;
 
+  /// No description provided for @profileDidDocumentLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'DID 文档'**
+  String get profileDidDocumentLabel;
+
+  /// No description provided for @profileOpenDidDocument.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开 DID 文档'**
+  String get profileOpenDidDocument;
+
+  /// No description provided for @profilePublicKeysLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'公钥'**
+  String get profilePublicKeysLabel;
+
+  /// No description provided for @profilePublicKeysTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'身份公钥'**
+  String get profilePublicKeysTitle;
+
+  /// No description provided for @profilePublicKeyCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个公钥'**
+  String profilePublicKeyCount(int count);
+
+  /// No description provided for @profilePublicKeyType.
+  ///
+  /// In zh, this message translates to:
+  /// **'类型'**
+  String get profilePublicKeyType;
+
+  /// No description provided for @profilePublicKeyPurpose.
+  ///
+  /// In zh, this message translates to:
+  /// **'用途'**
+  String get profilePublicKeyPurpose;
+
+  /// No description provided for @profilePublicKeyValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'publicKeyMultibase'**
+  String get profilePublicKeyValue;
+
+  /// No description provided for @profilePublicKeyCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制公钥'**
+  String get profilePublicKeyCopy;
+
+  /// No description provided for @profilePublicKeyCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'公钥已复制'**
+  String get profilePublicKeyCopied;
+
+  /// No description provided for @profilePublicKeyIdCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制 Key ID'**
+  String get profilePublicKeyIdCopy;
+
+  /// No description provided for @profilePublicKeyIdCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'Key ID 已复制'**
+  String get profilePublicKeyIdCopied;
+
   /// No description provided for @settingsTitle.
   ///
   /// In zh, this message translates to:
@@ -2735,6 +2807,186 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'请分开保管文件和口令。同时持有两者的人可以恢复此身份。'**
   String get identityExportHelperMessage;
+
+  /// No description provided for @settingsImportIdentityBackup.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入身份备份'**
+  String get settingsImportIdentityBackup;
+
+  /// No description provided for @identityBackupImportDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入加密身份备份'**
+  String get identityBackupImportDialogTitle;
+
+  /// No description provided for @identityBackupImportDialogMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择 AWiki 身份备份文件并输入口令。在确认备份内容之前不会导入任何内容。'**
+  String get identityBackupImportDialogMessage;
+
+  /// No description provided for @identityBackupImportReviewMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入前请核对以下身份信息。'**
+  String get identityBackupImportReviewMessage;
+
+  /// No description provided for @identityBackupImportHelperMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认之前，备份始终保持加密。'**
+  String get identityBackupImportHelperMessage;
+
+  /// No description provided for @identityBackupImportWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入会把该身份的根密钥和 DID 文档安装到本设备。消息、联系人和会话不会被恢复。同时持有文件和口令的人可以恢复此身份。'**
+  String get identityBackupImportWarning;
+
+  /// No description provided for @identityBackupImportSelectFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择备份文件'**
+  String get identityBackupImportSelectFile;
+
+  /// No description provided for @identityBackupImportSelectedFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'已选择：{fileName}'**
+  String identityBackupImportSelectedFile(Object fileName);
+
+  /// No description provided for @identityBackupImportNoFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先选择备份文件。'**
+  String get identityBackupImportNoFile;
+
+  /// No description provided for @identityBackupImportPassphraseLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份口令'**
+  String get identityBackupImportPassphraseLabel;
+
+  /// No description provided for @identityBackupImportPassphrasePlaceholder.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出时使用的口令'**
+  String get identityBackupImportPassphrasePlaceholder;
+
+  /// No description provided for @identityBackupImportPassphraseRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入备份口令。'**
+  String get identityBackupImportPassphraseRequired;
+
+  /// No description provided for @identityBackupImportInspectAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'检查备份'**
+  String get identityBackupImportInspectAction;
+
+  /// No description provided for @identityBackupImportConfirmAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入身份'**
+  String get identityBackupImportConfirmAction;
+
+  /// No description provided for @identityBackupImportDidLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'DID'**
+  String get identityBackupImportDidLabel;
+
+  /// No description provided for @identityBackupImportHandleLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'Handle'**
+  String get identityBackupImportHandleLabel;
+
+  /// No description provided for @identityBackupImportCustodyLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'密钥托管'**
+  String get identityBackupImportCustodyLabel;
+
+  /// No description provided for @identityBackupImportCustodyAnpRoot.
+  ///
+  /// In zh, this message translates to:
+  /// **'ANP 根密钥'**
+  String get identityBackupImportCustodyAnpRoot;
+
+  /// No description provided for @identityBackupImportExportedAtLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'导出时间'**
+  String get identityBackupImportExportedAtLabel;
+
+  /// No description provided for @identityBackupImportPresenceReason.
+  ///
+  /// In zh, this message translates to:
+  /// **'请验证身份以导入加密身份备份。'**
+  String get identityBackupImportPresenceReason;
+
+  /// No description provided for @identityBackupImportUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前版本暂不支持导入身份备份。'**
+  String get identityBackupImportUnsupported;
+
+  /// No description provided for @identityBackupImportInvalidFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'该文件不是有效的身份备份。'**
+  String get identityBackupImportInvalidFile;
+
+  /// No description provided for @identityBackupImportTooLarge.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份文件超过 1 MB。'**
+  String get identityBackupImportTooLarge;
+
+  /// No description provided for @identityBackupImportBadPassphrase.
+  ///
+  /// In zh, this message translates to:
+  /// **'口令错误或备份已损坏。'**
+  String get identityBackupImportBadPassphrase;
+
+  /// No description provided for @identityBackupImportUnsupportedCustody.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂不支持该备份的密钥托管方式。'**
+  String get identityBackupImportUnsupportedCustody;
+
+  /// No description provided for @identityBackupImportConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'该身份与本机已有身份数据冲突。'**
+  String get identityBackupImportConflict;
+
+  /// No description provided for @identityBackupImportUserPresenceDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'身份验证已取消，未导入任何内容。'**
+  String get identityBackupImportUserPresenceDenied;
+
+  /// No description provided for @identityBackupImportStateChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前登录身份已变化，导入已取消。'**
+  String get identityBackupImportStateChanged;
+
+  /// No description provided for @identityBackupImportFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法导入身份备份。'**
+  String get identityBackupImportFailed;
+
+  /// No description provided for @identityBackupImportAlreadyPresent.
+  ///
+  /// In zh, this message translates to:
+  /// **'该身份已存在于本设备且已登录。'**
+  String get identityBackupImportAlreadyPresent;
 
   /// No description provided for @messageSyncStatusTitle.
   ///

@@ -1,6 +1,8 @@
+import 'package:awiki_me/src/app/app_services.dart';
 import 'package:awiki_me/src/domain/entities/session_identity.dart';
 import 'package:awiki_me/src/domain/entities/user_profile.dart';
 import 'package:awiki_me/src/domain/entities/relationship_summary.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:awiki_me/src/presentation/app_shell/app_shell.dart';
 import 'package:awiki_me/src/presentation/friends/friends_page.dart';
 import 'package:awiki_me/src/presentation/friends/friends_provider.dart';
@@ -24,6 +26,25 @@ Future<void> _simulateSystemBack(WidgetTester tester) {
     (_) {},
   );
 }
+
+const _identityDocumentWithKeys = IdentityDocumentSummary(
+  did: 'did:wba:awiki.me:user:alice:e1_demo',
+  verificationMethods: <IdentityVerificationMethod>[
+    IdentityVerificationMethod(
+      keyId: 'did:wba:awiki.me:user:alice:e1_demo#key-1',
+      type: 'Multikey',
+      relationships: <String>['authentication', 'assertionMethod'],
+      publicKeyMultibase: 'z6MkRootPublicKey',
+    ),
+    IdentityVerificationMethod(
+      keyId: 'did:wba:awiki.me:user:alice:e1_demo#key-2',
+      type: 'X25519KeyAgreementKey2019',
+      relationships: <String>['keyAgreement'],
+      publicKeyMultibase: 'z6LSE2eePublicKey',
+    ),
+  ],
+);
+
 
 void main() {
   testWidgets('窄屏我的页面使用玻璃画布且由身份卡领起', (tester) async {
@@ -579,5 +600,97 @@ void main() {
     expect(handleText.overflow, TextOverflow.ellipsis);
     expect(handleText.data, contains('alice'));
     expect(find.byKey(const Key('profile-did-value')), findsNothing);
+  });
+
+  testWidgets('宽屏身份信息展示 DID 文档链接与公钥摘要', (tester) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1200, 800);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const profile = UserProfile(
+      did: 'did:wba:awiki.me:user:alice:e1_demo',
+      nickName: 'Alice',
+      bio: '',
+      tags: <String>[],
+      handle: 'alice',
+      profileMarkdown: '',
+    );
+
+    await tester.pumpWidget(
+      buildLocalizedTestApp(
+        home: const ProfilePage(),
+        gateway: FakeAwikiGateway()..myProfile = profile,
+        profile: profile,
+        homepageMarkdownLoader: (_) async => null,
+        providerOverrides: <Override>[
+          identityDocumentSummaryProvider.overrideWith(
+            (ref, selector) async => _identityDocumentWithKeys,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('profile-did-document-row')), findsOneWidget);
+    expect(
+      find.text('https://awiki.me/user/alice/e1_demo/did.json'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('profile-public-keys-row')), findsOneWidget);
+    expect(find.text('2 个公钥'), findsOneWidget);
+
+    await tester.tap(find.text('2 个公钥'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('profile-public-keys-dialog')), findsOneWidget);
+    expect(find.text('身份公钥'), findsOneWidget);
+    expect(find.byKey(const Key('profile-public-key-0')), findsOneWidget);
+    expect(find.byKey(const Key('profile-public-key-1')), findsOneWidget);
+    expect(find.text('z6MkRootPublicKey'), findsOneWidget);
+    expect(find.text('z6LSE2eePublicKey'), findsOneWidget);
+    expect(find.textContaining('authentication, assertionMethod'), findsOneWidget);
+  });
+
+  testWidgets('窄屏我页展示 DID 文档与公钥入口', (tester) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const profile = UserProfile(
+      did: 'did:wba:awiki.me:user:alice:e1_demo',
+      nickName: 'Alice',
+      bio: '',
+      tags: <String>[],
+      handle: 'alice',
+      profileMarkdown: '',
+    );
+
+    await tester.pumpWidget(
+      buildLocalizedTestApp(
+        home: const ProfilePage(),
+        gateway: FakeAwikiGateway()..myProfile = profile,
+        profile: profile,
+        homepageMarkdownLoader: (_) async => null,
+        providerOverrides: <Override>[
+          identityDocumentSummaryProvider.overrideWith(
+            (ref, selector) async => _identityDocumentWithKeys,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('profile-did-document-row')), findsOneWidget);
+    expect(find.byKey(const Key('profile-public-keys-row')), findsOneWidget);
+    expect(find.text('2 个公钥'), findsOneWidget);
+    // The raw DID stays hidden on the compact Me tab.
+    expect(find.byKey(const Key('profile-did-value')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('profile-public-keys-row')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('profile-public-keys-dialog')), findsOneWidget);
   });
 }

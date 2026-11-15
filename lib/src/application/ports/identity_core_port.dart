@@ -85,6 +85,8 @@ abstract interface class IdentityCorePort {
 }
 
 abstract interface class IdentityDocumentCorePort {
+  Future<IdentityDocumentSummary> identityDocument(String selector);
+
   Future<IdentityServicesSnapshot> identityServices(String selector);
 
   Future<void> updateIdentityServices(
