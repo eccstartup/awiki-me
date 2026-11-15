@@ -1,7 +1,9 @@
 # 身份备份导出（App 侧方案）
 
-> 状态：App 编排、口令确认与保存链路已落地；**加密包的字节生产仍由 Core 提供**。
-> 在 Core 暴露 typed export API 之前，产品入口会以稳定错误码 fail closed，不生成任何文件。
+> 状态：App 编排、口令确认、保存链路与 Core 加密导出均已落地。
+> `im-core` 提供 `IdentityBackupPackage`（`AWIKIBK1` v1 容器，Argon2id + XChaCha20-Poly1305），
+> Dart SDK 通过 `exportIdentityBackup` 暴露，App 通过 `AwikiImCoreIdentityExportAdapter`
+> 覆盖 `identityExportPortProvider`。导入/恢复 API 仍未实现。
 >
 > 相关文档：[identity-secret-storage.md](identity-secret-storage.md)、
 > [storage-scope-vault-contract.md](storage-scope-vault-contract.md)、
@@ -95,33 +97,53 @@ Core 必须：
 6. 保证同一输入产生可解密、可校验的容器；nonce 每次随机。
 
 App 默认注入 `UnsupportedIdentityExportPort`，`isSupported == false` 时在系统认证前
-直接失败。Core SDK 就绪后，在 `lib/src/data/im_core/` 增加适配器并在
-`app_services.dart` 用 `identityExportPortProvider` 覆盖，不改 UI 与 service。
+直接失败。Core 导出已实现后，`AppBootstrap` 在装配 Core runtime 的同一路径上创建
+[`AwikiImCoreIdentityExportAdapter`](../lib/src/data/im_core/awiki_im_core_identity_export_adapter.dart)，
+经 `awiki_me_app.dart` 覆盖 `identityExportPortProvider`，不改 UI 与 service。
 
-## 5. 建议的 v1 容器格式（Core 权威）
+Core 侧对应的 Dart SDK 契约（`packages/awiki_im_core`）：
 
-以下格式供 Core 实现与跨端测试对齐；App 不依赖这些字节布局。
+```dart
+Future<IdentityBackupPackage> exportIdentityBackup(
+  IdentitySelector selector, {
+  required Uint8List passphrase,
+});
+```
+
+- `selector` 固定为 `IdentitySelector.id(localIdentityId)`，不做 Handle/DID 猜测。
+- Core 同步复制口令字节；Dart 侧传入的 `Uint8List` 仍由 service 在调用后清零。
+- 口令长度由 Core 校验：8–1024 UTF-8 字节，越界返回 `invalid_input`。
+- 仅托管（custody-only，无本地密钥材料）的身份返回
+  `unsupported_capability`，`capability == "identity_backup.custody_only"`；
+  适配器将其映射为 App 的 `identity_export.unsupported`，其余 Core 错误
+  映射为 `identity_export.failed`，均不生成文件。
+
+## 5. v1 容器格式（Core 权威，已实现）
+
+以下格式由 `crates/im-core/src/internal/identity_backup.rs` 实现；App 不依赖这些字节布局。
 
 ### 5.1 外层二进制
 
 ```
-magic            8 bytes   "AWIKIBK1"
-version          u16 LE    1
-header_len       u16 LE    后续 header 字节数
-kdf_id           u8        1 = Argon2id
-aead_id          u8        1 = XChaCha20-Poly1305
-reserved         u16 LE    0
-salt             16 bytes
-nonce            24 bytes
-ciphertext_len   u64 LE
-ciphertext       ciphertext_len bytes
+offset  size  field
+0       8     magic = "AWIKIBK1"
+8       2     version = 1 (u16 LE)
+10      2     header_len = 64 (u16 LE，整个 header 的长度)
+12      1     kdf_id = 1 (Argon2id)
+13      1     aead_id = 1 (XChaCha20-Poly1305)
+14      2     reserved = 0 (u16 LE)
+16      16    salt
+32      24    nonce
+56      8     ciphertext_len (u64 LE，含 16 字节 tag)
+64      N     ciphertext
 ```
 
-- KDF：Argon2id，`m = 64 MiB`、`t = 3`、`p = 1`，输出 32 字节密钥。
-- AEAD：XChaCha20-Poly1305，24 字节随机 nonce。
-- AAD：`magic || version || header_len || kdf_id || aead_id || reserved || salt || nonce`，
+- KDF：Argon2id v0x13，`m = 64 MiB`、`t = 3`、`p = 1`，输出 32 字节密钥。
+- AEAD：XChaCha20-Poly1305，24 字节随机 nonce；salt 与 nonce 每次导出重新生成。
+- AAD：header 前 56 字节（`magic` 到 `nonce`，即不含 `ciphertext_len`），
   防止头部被替换。
-- 解密失败、AAD 不匹配、版本未知都必须拒绝，不能部分恢复。
+- 校验：文件总长必须等于 `64 + ciphertext_len`；magic/version/header_len/kdf/aead/reserved
+  任一不符、AAD 不匹配、解密失败都整体拒绝，不能部分恢复。
 
 ### 5.2 明文 payload（仅 Core 可见）
 
@@ -129,30 +151,54 @@ ciphertext       ciphertext_len bytes
 {
   "schema": "awiki.identity-backup.v1",
   "identity": {
-    "did": "did:wba:...",
-    "handle": "alice.awiki",
     "local_identity_id": "identity-uuid",
-    "created_at": "2026-11-15T00:00:00Z"
+    "did": "did:wba:...",
+    "handle": "alice",
+    "full_handle": "alice.awiki.ai",
+    "credential_name": "alice",
+    "created_at": "2026-11-15T00:00:00Z",
+    "custody": "vnext"
   },
-  "keys": [
-    {
-      "key_id": "key-1",
-      "algorithm": "Ed25519",
-      "private_key_pem": "-----BEGIN PRIVATE KEY-----..."
-    }
+  "keys": {
+    "signing_private_pem": "-----BEGIN PRIVATE KEY-----...",
+    "did_document_root_private_pem": "-----BEGIN PRIVATE KEY-----...",
+    "e2ee_signing_private_pem": "-----BEGIN PRIVATE KEY-----...",
+    "e2ee_agreement_private_pem": "-----BEGIN PRIVATE KEY-----..."
+  },
+  "did_document": {},
+  "excluded": [
+    "auth_jwt",
+    "daemon_subkey_private",
+    "device_certificates",
+    "identity_vault_root",
+    "mls_device_state",
+    "messages",
+    "read_state",
+    "attachments",
+    "product_overlay"
   ],
-  "identity_document": {},
-  "e2ee": {
-    "direct_identity_private_key": "base64...",
-    "signed_prekey_private": "base64..."
-  },
   "metadata": {
     "exported_at": "2026-11-15T00:00:00Z",
-    "core_version": "...",
-    "app_version": "..."
+    "core_version": "0.1.9",
+    "container": "AWIKIBK1",
+    "kdf": { "id": "argon2id", "memory_kib": 65536, "iterations": 3, "parallelism": 1 },
+    "aead": { "id": "xchacha20-poly1305", "nonce_bytes": 24 }
   }
 }
 ```
+
+密钥按角色导出，来自该身份的 vault migration refs 或 file-compat 本地材料：
+
+| 字段 | vnext refs | legacy refs | file-compat |
+|---|---|---|---|
+| `signing_private_pem` | `device_request_signing_private`（必有） | `default_signing_private`（必有） | `key-1-private.pem` / `private.key` |
+| `did_document_root_private_pem` | `did_document_root_private`（可选） | 无 | 可选 |
+| `e2ee_signing_private_pem` | 无 | `e2ee_signing_private`（可选） | `e2ee-signing-private.pem` |
+| `e2ee_agreement_private_pem` | `e2ee_agreement_private`（必有） | `e2ee_agreement_private`（必有） | `e2ee-agreement-private.pem` / `key-3-private.pem` |
+
+`handle`/`full_handle`/`created_at` 在缺失时省略；`credential_name` 取 local alias，
+否则退回 local identity id。`did_document` 来自身份目录中的 `did_document.json`/`did.json`，
+缺失时省略。任何材料缺失都按 `identity_not_ready` 失败，不写部分包。
 
 默认**不包含**：
 
@@ -169,10 +215,12 @@ ciphertext       ciphertext_len bytes
 ### 5.3 文件名与 MIME
 
 ```
-awiki-identity-<handle>-<yyyyMMdd-HHmmss>.awiki-backup
+awiki-identity-<component>-<yyyyMMdd-HHmmss>.awiki-backup
 mimeType: application/vnd.awiki.identity-backup
 ```
 
+`component` 优先取 full handle，其次 handle，最后 local identity id；非
+`[a-zA-Z0-9_-]` 字符替换为 `-`，去首尾 `-`，转小写并截断到 48 字符。
 文件名由 Core 生成。App 只拒绝空文件名、路径分隔符和超长名称，不重写扩展名。
 
 ## 6. App 实现结构
@@ -180,11 +228,13 @@ mimeType: application/vnd.awiki.identity-backup
 | 文件 | 职责 |
 |---|---|
 | `lib/src/application/ports/identity_export_port.dart` | 不透明包、typed 异常、默认 fail-closed 端口 |
+| `lib/src/data/im_core/awiki_im_core_identity_export_adapter.dart` | 调用 Core `exportIdentityBackup`，映射 `identity_backup.*` 能力错误 |
 | `lib/src/application/identity_export_service.dart` | 支持性检查、口令/身份校验、presence、session 围栏、Core 调用、保存 |
 | `lib/src/presentation/settings/identity_export_dialog.dart` | 口令输入、确认、长度/一致性校验 |
 | `lib/src/presentation/settings/settings_page.dart` | 从三套响应式入口打开同一弹窗 |
 | `lib/src/presentation/app_shell/providers/app_runtime_provider.dart` | 捕获 `SessionEpoch`、调用 service、映射稳定错误码到 UI 反馈 |
-| `lib/src/app/app_services.dart` | `identityExportPortProvider` / `identityExportServiceProvider` |
+| `lib/src/app/bootstrap.dart` / `awiki_me_app.dart` | 在 Core runtime 装配处创建适配器并覆盖 `identityExportPort` |
+| `lib/src/app/app_services.dart` | `identityExportPortProvider` / `identityExportServiceProvider`（默认 `UnsupportedIdentityExportPort`） |
 
 服务层顺序固定：
 
@@ -215,7 +265,8 @@ mimeType: application/vnd.awiki.identity-backup
 
 ## 8. 测试
 
-App 侧（已加入/待跑，`tests/unit/application/identity_export_service_test.dart`）：
+App 侧（`tests/unit/application/identity_export_service_test.dart`、
+`tests/unit/data/im_core/awiki_im_core_identity_export_adapter_test.dart`）：
 
 - 不支持端口时不调用 presence、不保存；
 - 短口令、空身份被拒绝；
@@ -229,18 +280,33 @@ App 侧（已加入/待跑，`tests/unit/application/identity_export_service_tes
 Widget：设置页点击入口打开弹窗；口令过短、两次不一致时不能提交；输入一致后关闭
 弹窗并调用 runtime。
 
-Core/跨端（待 Core API）：
+适配器（`awiki_im_core_identity_export_adapter_test.dart`）：
+
+- 传入 exact `IdentitySelector.id` 与调用方口令字节（同一 `Uint8List` 引用）；
+- 返回 Core 的文件名/MIME/bytes；
+- `unsupported_capability` + `identity_backup.*` → `identity_export.unsupported`；
+- 其他 Core 错误 → `identity_export.failed`。
+
+Core（`crates/im-core/src/internal/identity_backup.rs`，Rust unit tests）：
+
+- 密封→解密 round-trip，payload 字段与 schema 一致；
+- 错误口令、篡改 header（salt）、篡改 ciphertext、截断容器全部拒绝；
+- 文件名 handle 清洗、时间戳格式；
+- 口令 8–1024 字节校验。
+
+Core/跨端（待实现）：
 
 - 金标向量：固定 payload + 固定 salt/nonce 的容器可被独立实现解密；
-- 错误口令、篡改 header、篡改 ciphertext、未知版本全部失败；
 - 导出 → 新 root 导入 → DID/Handle/Direct 连续性 exact-one；
 - 包内不含 root key、JWT、设备 token（字节级检查）；
 - 大 payload 与并发导出不破坏 vault 锁。
 
 ## 9. 落地顺序
 
-1. Core：实现 `exportIdentityBackup` 与 v1 容器/解密校验，提供 Rust 与 Dart 测试向量。
-2. App：新增 `AwikiImCoreIdentityExportAdapter`，覆盖 `identityExportPortProvider`。
+1. ~~Core：实现 `exportIdentityBackup` 与 v1 容器/解密校验，提供 Rust 与 Dart 测试向量。~~
+   已完成：`ImCore::export_identity_backup(_async)` + FRB `exportIdentityBackup`。
+2. ~~App：新增 `AwikiImCoreIdentityExportAdapter`，覆盖 `identityExportPortProvider`。~~
+   已完成：`AppBootstrap` 装配并透传到 `AwikiMeApp`。
 3. 恢复：为 `importCredentialArchive` 增加对应的 Core import API 与专用 UI；在此之前
    导入入口继续保持不可用。
 4. E2E：在 `tests/e2e/` 增加 secret-free attestation，只记录“导出成功/大小/版本/

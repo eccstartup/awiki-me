@@ -34,6 +34,7 @@ import '../application/ports/device_management_core_port.dart';
 import '../application/ports/group_encryption_core_port.dart';
 import '../application/ports/handle_recovery_core_port.dart';
 import '../application/ports/identity_core_port.dart';
+import '../application/ports/identity_export_port.dart';
 import '../application/ports/legacy_registry_epoch_adoption_port.dart';
 import '../application/ports/personal_agent_binding_port.dart';
 import '../application/ports/root_key_transfer_port.dart';
@@ -57,6 +58,7 @@ import '../data/im_core/awiki_im_core_group_adapter.dart';
 import '../data/im_core/awiki_im_core_group_encryption_adapter.dart';
 import '../data/im_core/awiki_im_core_handle_recovery_adapter.dart';
 import '../data/im_core/awiki_im_core_identity_adapter.dart';
+import '../data/im_core/awiki_im_core_identity_export_adapter.dart';
 import '../data/im_core/awiki_im_core_message_adapter.dart';
 import '../data/im_core/awiki_im_core_message_sync_adapter.dart';
 import '../data/im_core/awiki_im_core_paths.dart';
@@ -124,6 +126,7 @@ class AppBootstrap {
     this.identityCorePort,
     this.deviceManagementCorePort,
     this.rootKeyTransferPort,
+    this.identityExportPort,
     this.groupEncryptionCorePort,
     this.handleRecoveryCorePort,
     this.legacyRegistryEpochAdoptionPort,
@@ -168,6 +171,7 @@ class AppBootstrap {
   final IdentityCorePort? identityCorePort;
   final DeviceManagementCorePort? deviceManagementCorePort;
   final RootKeyTransferPort? rootKeyTransferPort;
+  final IdentityExportPort? identityExportPort;
   final GroupEncryptionCorePort? groupEncryptionCorePort;
   final HandleRecoveryCorePort? handleRecoveryCorePort;
   final LegacyRegistryEpochAdoptionPort? legacyRegistryEpochAdoptionPort;
@@ -331,6 +335,9 @@ class AppBootstrap {
       final rootKeyTransferAdapter = AwikiImCoreRootKeyTransferAdapter(
         runtime: runtime,
       );
+      final identityExportAdapter = AwikiImCoreIdentityExportAdapter(
+        runtime: runtime,
+      );
       final handleRecoveryAdapter = AwikiImCoreHandleRecoveryAdapter(
         runtime: runtime,
       );
@@ -487,6 +494,7 @@ class AppBootstrap {
         identityCorePort: identityAdapter,
         deviceManagementCorePort: deviceManagementAdapter,
         rootKeyTransferPort: rootKeyTransferAdapter,
+        identityExportPort: identityExportAdapter,
         groupEncryptionCorePort: groupEncryptionAdapter,
         handleRecoveryCorePort: handleRecoveryAdapter,
         legacyRegistryEpochAdoptionPort: handleRecoveryAdapter,
@@ -592,6 +600,7 @@ class AppBootstrap {
       identityCorePort: identityCorePort,
       deviceManagementCorePort: deviceManagementCorePort,
       rootKeyTransferPort: rootKeyTransferPort,
+      identityExportPort: identityExportPort,
       groupEncryptionCorePort: groupEncryptionCorePort,
       handleRecoveryCorePort: handleRecoveryCorePort,
       legacyRegistryEpochAdoptionPort: legacyRegistryEpochAdoptionPort,
