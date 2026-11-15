@@ -3,7 +3,9 @@
 > 状态：App 编排、口令确认、保存链路与 Core 加密导出均已落地。
 > `im-core` 提供 `IdentityBackupPackage`（`AWIKIBK1` v1 容器，Argon2id + XChaCha20-Poly1305），
 > Dart SDK 通过 `exportIdentityBackup` 暴露，App 通过 `AwikiImCoreIdentityExportAdapter`
-> 覆盖 `identityExportPortProvider`。导入/恢复 API 仍未实现。
+> 覆盖 `identityExportPortProvider`。当前 onboarding 产生的 ANP 托管身份导出
+> root-control 私钥（`custody: "anp_root"`），设备签名/E2EE 密钥不可导出。
+> 导入/恢复 API 仍未实现。
 >
 > 相关文档：[identity-secret-storage.md](identity-secret-storage.md)、
 > [storage-scope-vault-contract.md](storage-scope-vault-contract.md)、
@@ -113,10 +115,15 @@ Future<IdentityBackupPackage> exportIdentityBackup(
 - `selector` 固定为 `IdentitySelector.id(localIdentityId)`，不做 Handle/DID 猜测。
 - Core 同步复制口令字节；Dart 侧传入的 `Uint8List` 仍由 service 在调用后清零。
 - 口令长度由 Core 校验：8–1024 UTF-8 字节，越界返回 `invalid_input`。
-- 仅托管（custody-only，无本地密钥材料）的身份返回
+- ANP 托管身份（当前 onboarding 默认）导出 **root-control 私钥**及其 DID document
+  与身份元数据，`custody == "anp_root"`；设备签名密钥与 E2EE 密钥属于设备作用域，
+  不可导出，新设备重新注册自己的密钥。
+- 仅托管且没有本地 root-control 密钥的身份（例如加入设备）返回
   `unsupported_capability`，`capability == "identity_backup.custody_only"`；
   适配器将其映射为 App 的 `identity_export.unsupported`，其余 Core 错误
   映射为 `identity_export.failed`，均不生成文件。
+- App 已在调用 Core 前完成 `UserPresencePort`；Core 在向 ANP identity store 请求
+  root 导出时仍显式设置 `user_presence_confirmed: true`，该信任边界不变。
 
 ## 5. v1 容器格式（Core 权威，已实现）
 
@@ -196,9 +203,17 @@ offset  size  field
 | `e2ee_signing_private_pem` | 无 | `e2ee_signing_private`（可选） | `e2ee-signing-private.pem` |
 | `e2ee_agreement_private_pem` | `e2ee_agreement_private`（必有） | `e2ee_agreement_private`（必有） | `e2ee-agreement-private.pem` / `key-3-private.pem` |
 
+`keys` 的每个字段都是可选的，但至少必须存在一项，否则 Core 返回
+`identity_not_ready`（`missing: ["identity_private_key"]`），不写部分包。
+ANP 托管身份只导出 `did_document_root_private_pem`：Core 从 ANP identity store 的
+唯一 active managed RootControl key 取得 PKCS#8 DER，并重新编码为与 file-compat
+一致的 PEM 形状；`identity.custody == "anp_root"`，设备签名/E2EE 字段省略。
+设备签名与 E2EE 私钥属于设备作用域，按设计不可导出，新设备重新注册。
+
 `handle`/`full_handle`/`created_at` 在缺失时省略；`credential_name` 取 local alias，
 否则退回 local identity id。`did_document` 来自身份目录中的 `did_document.json`/`did.json`，
-缺失时省略。任何材料缺失都按 `identity_not_ready` 失败，不写部分包。
+缺失时省略。vault/file-compat 路径上必需材料缺失时按 `identity_not_ready` 失败，
+不写部分包；ANP 托管身份缺少设备密钥属于预期，不属于缺失。
 
 默认**不包含**：
 
@@ -292,7 +307,16 @@ Core（`crates/im-core/src/internal/identity_backup.rs`，Rust unit tests）：
 - 密封→解密 round-trip，payload 字段与 schema 一致；
 - 错误口令、篡改 header（salt）、篡改 ciphertext、截断容器全部拒绝；
 - 文件名 handle 清洗、时间戳格式；
-- 口令 8–1024 字节校验。
+- 口令 8–1024 字节校验；
+- ANP root-only 材料只保留 root PEM 且 `custody == "anp_root"`；
+- 无任何密钥材料时 fail closed；
+- PEM 编码只接受 48 字节 Ed25519 PKCS#8。
+
+Core（`crates/im-core/src/identity/registry.rs`，Rust 集成测试）：
+
+- 注入 workspace root key 创建的真实 ANP 身份：导出包解密后
+  `custody == "anp_root"`、无设备签名/E2EE 字段，root PEM 解码后的 DER
+  等于 ANP identity store 导出的 root-control PKCS#8。
 
 Core/跨端（待实现）：
 
