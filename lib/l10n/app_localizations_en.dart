@@ -1443,9 +1443,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String identityExportDialogMessage(Object identityLabel) {
-    return 'Create a passphrase for $identityLabel. The encrypted backup can '
-        "restore this identity's DID keys on a new device. AWiki Me cannot "
-        'recover the passphrase.';
+    return 'Create a passphrase for $identityLabel. The encrypted backup can restore this identity\'s DID keys on a new device. AWiki Me cannot recover the passphrase.';
   }
 
   @override
@@ -1458,7 +1456,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get identityExportPassphraseConfirmLabel => 'Confirm passphrase';
 
   @override
-  String get identityExportPassphraseMismatch => 'The passphrases do not match.';
+  String get identityExportPassphraseMismatch =>
+      'The passphrases do not match.';
 
   @override
   String get identityExportPassphraseTooShort => 'Use at least 8 characters.';

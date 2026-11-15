@@ -14,3 +14,8 @@ analyzer:
     - linux/flutter/ephemeral/**
     - macos/Flutter/ephemeral/**
     - macos/Pods/**
+    - android/**
+    - ios/**
+    - windows/**
+    - macos/**
+    - linux/**
