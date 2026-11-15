@@ -168,6 +168,7 @@ class ImCoreAppSessionService
     with AppSessionTransitionGuard
     implements AppSessionService, LocalIdentityDataDeletionSessionService {
   static const Duration _defaultRealtimeCleanupTimeout = Duration(seconds: 5);
+  static const Duration _defaultActivationAuthTimeout = Duration(seconds: 12);
 
   ImCoreAppSessionService({
     required ImCoreRuntimePort runtime,
@@ -179,6 +180,7 @@ class ImCoreAppSessionService
     RealtimeCorePort? realtime,
     required AppBootstrapEpochBarrierPort bootstrapEpochBarrier,
     Duration realtimeCleanupTimeout = _defaultRealtimeCleanupTimeout,
+    Duration activationAuthTimeout = _defaultActivationAuthTimeout,
   }) : _runtime = runtime,
        _identities = identities,
        _auth = auth,
@@ -187,7 +189,8 @@ class ImCoreAppSessionService
        _expectedDidDomain = _normalizeDidDomain(expectedDidDomain),
        _realtime = realtime,
        _bootstrapEpochBarrier = bootstrapEpochBarrier,
-       _realtimeCleanupTimeout = realtimeCleanupTimeout;
+       _realtimeCleanupTimeout = realtimeCleanupTimeout,
+       _activationAuthTimeout = activationAuthTimeout;
 
   final ImCoreRuntimePort _runtime;
   final IdentityCorePort _identities;
@@ -198,6 +201,7 @@ class ImCoreAppSessionService
   final RealtimeCorePort? _realtime;
   final AppBootstrapEpochBarrierPort _bootstrapEpochBarrier;
   final Duration _realtimeCleanupTimeout;
+  final Duration _activationAuthTimeout;
 
   AppSession? _current;
   Future<void> _sessionTransitionTail = Future<void>.value();
@@ -430,7 +434,11 @@ class ImCoreAppSessionService
     }
     late final AppSession candidate;
     try {
-      final auth = await _auth.ensureSession();
+      // Core's transport may hold a JWT refresh for its 30s response timeout,
+      // which outlasts the App's request deadline; bound it so a stalled
+      // refresh reaches the transient-auth fallback instead of failing the
+      // whole switch. Background sync refreshes the token afterwards.
+      final auth = await _auth.ensureSession().timeout(_activationAuthTimeout);
       _requireCurrentTransition(transition);
       candidate = boundIdentity.copyWith(
         authenticated: auth.authenticated,

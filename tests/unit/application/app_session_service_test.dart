@@ -517,6 +517,73 @@ void main() {
     });
 
     test(
+      'identity activation falls back to unauthenticated when auth exceeds its bound',
+      () async {
+        final runtime = _FakeRuntime();
+        final identity = _session('id-slow-auth').copyWith(
+          authenticated: true,
+          expiresAt: DateTime.utc(2026, 5, 22),
+          jwtToken: 'stale-jwt',
+        );
+        final auth = _FakeAuth(
+          ensureCompleter: Completer<AppAuthState>(),
+          ensureCompleterCall: 1,
+        );
+        final active = _FakeActiveSessionStore();
+        final service = ImCoreAppSessionService(
+          bootstrapEpochBarrier: const NoopAppBootstrapEpochBarrier(),
+          runtime: runtime,
+          identities: _FakeIdentities(defaultIdentity: identity),
+          auth: auth,
+          activeSessionStore: active,
+          activationAuthTimeout: const Duration(milliseconds: 10),
+        );
+
+        final session = await service.loginWithIdentity(identity.identityId);
+
+        expect(session.identityId, 'id-slow-auth');
+        expect(session.authenticated, isFalse);
+        expect(session.expiresAt, isNull);
+        expect(session.jwtToken, isNull);
+        expect(auth.ensureCount, 1);
+        expect(runtime.switchedIdentities, ['id-slow-auth']);
+        expect(await active.readActiveIdentityId(), 'id-slow-auth');
+        expect((await service.currentSession())?.identityId, 'id-slow-auth');
+      },
+    );
+
+    test(
+      'device mutation refresh stays fail-closed when auth exceeds its bound',
+      () async {
+        final identity = _session('id-device-auth');
+        final runtime = _FakeRuntime();
+        final auth = _FakeAuth(
+          ensureCompleter: Completer<AppAuthState>(),
+          ensureCompleterCall: 2,
+        );
+        final active = _FakeActiveSessionStore(identity.identityId);
+        final service = ImCoreAppSessionService(
+          bootstrapEpochBarrier: const NoopAppBootstrapEpochBarrier(),
+          runtime: runtime,
+          identities: _FakeIdentities(defaultIdentity: identity),
+          auth: auth,
+          activeSessionStore: active,
+          activationAuthTimeout: const Duration(milliseconds: 10),
+        );
+        await service.restoreSession();
+
+        await expectLater(
+          service.refreshCurrentIdentityClientAfterDeviceMutation(),
+          throwsA(isA<TimeoutException>()),
+        );
+
+        expect(auth.ensureCount, 2);
+        expect(await service.currentSession(), isNull);
+        expect(await active.readActiveIdentityId(), isNull);
+      },
+    );
+
+    test(
       'activateIdentity fails closed when identity vault verify fails',
       () async {
         final runtime = _FakeRuntime(
