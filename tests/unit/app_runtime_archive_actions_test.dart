@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:awiki_me/src/application/identity_backup_import_service.dart';
 import 'package:awiki_me/src/application/models/conversation_patch.dart';
+import 'package:awiki_me/src/application/ports/identity_backup_import_port.dart';
 import 'package:awiki_me/src/application/ports/identity_core_port.dart';
 import 'package:awiki_me/src/application/ports/identity_export_port.dart';
 import 'package:awiki_me/src/application/ports/user_presence_port.dart';
@@ -44,25 +46,127 @@ void main() {
       addTearDown(container.dispose);
     });
 
-    test('导入本地凭证显示暂未实现普通提示', () async {
-      gateway.importedCredential = const SessionIdentity(
-        did: 'did:test:123',
-        credentialName: 'default',
+    test('导入已在当前凭证中的身份时保持登录并提示已存在', () async {
+      const session = SessionIdentity(
+        did: 'did:wba:awiki.info:users:alice-import',
+        localIdentityId: 'identity-alice-import',
+        credentialName: 'alice-local',
         displayName: 'Alice',
-        handle: 'alice',
-        jwtToken: 'token-123',
+        handle: 'alice.awiki.info',
+        jwtToken: 'token-alice',
       );
-      gateway.localCredentials = <SessionIdentity>[gateway.importedCredential!];
+      final importPort = _RecordingIdentityBackupImportPort(
+        outcome: const IdentityBackupImportOutcome(
+          identityId: 'identity-alice-import',
+          did: 'did:wba:awiki.info:users:alice-import',
+          rootKeyId: 'did:wba:awiki.info:users:alice-import#root',
+          alreadyPresent: true,
+        ),
+      );
+      final presence = _RecordingUserPresence(result: true);
+      final isolatedContainer = ProviderContainer(
+        overrides: <Override>[
+          awikiAccountGatewayProvider.overrideWithValue(gateway),
+          ...fakeApplicationServiceOverrides(gateway),
+          realtimeGatewayProvider.overrideWithValue(FakeRealtimeGateway()),
+          notificationFacadeProvider.overrideWithValue(
+            FakeNotificationFacade(),
+          ),
+          updateServiceProvider.overrideWithValue(FakeUpdateService()),
+          identityBackupImportPortProvider.overrideWithValue(importPort),
+          userPresencePortProvider.overrideWithValue(presence),
+        ],
+      );
+      addTearDown(isolatedContainer.dispose);
+      isolatedContainer.read(sessionProvider.notifier).setSession(session);
 
-      await container
+      await isolatedContainer
           .read(appRuntimeProvider.notifier)
-          .importCredentialArchive();
+          .importIdentityBackup(
+            backup: IdentityBackupSelection(
+              fileName: 'alice.awikibk',
+              bytes: Uint8List.fromList(<int>[1, 2, 3]),
+            ),
+            passphrase: 'correct horse',
+            presenceReason: 'import test backup',
+          );
 
-      expect(gateway.importCalls, 0);
-      expect(container.read(sessionProvider).localCredentials, isEmpty);
-      final feedback = container.read(uiFeedbackProvider);
+      expect(importPort.importCalls, 1);
+      expect(utf8.decode(importPort.passphraseCopy!), 'correct horse');
+      expect(importPort.lastPassphrase, everyElement(0));
+      expect(presence.lastReason, 'import test backup');
+      expect(gateway.logoutCalls, 0);
+      expect(isolatedContainer.read(sessionProvider).session, session);
+      final feedback = isolatedContainer.read(uiFeedbackProvider);
       expect(feedback?.danger, isFalse);
-      expect(feedback?.message.id, 'featureNotImplemented');
+      expect(feedback?.message.id, 'identityBackupImportAlreadyPresent');
+    });
+
+    test('导入新身份后退出当前会话并刷新可选本地凭证', () async {
+      const current = SessionIdentity(
+        did: 'did:wba:awiki.info:users:alice-current',
+        localIdentityId: 'identity-alice-current',
+        credentialName: 'alice-current',
+        displayName: 'Alice',
+        handle: 'alice.awiki.info',
+        jwtToken: 'token-current',
+      );
+      const imported = SessionIdentity(
+        did: 'did:wba:awiki.info:users:alice-imported',
+        localIdentityId: 'identity-alice-imported',
+        credentialName: 'alice-imported',
+        displayName: 'Alice Imported',
+        handle: 'alice.awiki.info',
+        jwtToken: 'token-imported',
+      );
+      gateway.localCredentials = const <SessionIdentity>[imported];
+      final importPort = _RecordingIdentityBackupImportPort(
+        outcome: const IdentityBackupImportOutcome(
+          identityId: 'identity-alice-imported',
+          did: 'did:wba:awiki.info:users:alice-imported',
+          rootKeyId: 'did:wba:awiki.info:users:alice-imported#root',
+          alreadyPresent: false,
+        ),
+      );
+      final presence = _RecordingUserPresence(result: true);
+      final isolatedContainer = ProviderContainer(
+        overrides: <Override>[
+          awikiAccountGatewayProvider.overrideWithValue(gateway),
+          ...fakeApplicationServiceOverrides(gateway),
+          realtimeGatewayProvider.overrideWithValue(FakeRealtimeGateway()),
+          notificationFacadeProvider.overrideWithValue(
+            FakeNotificationFacade(),
+          ),
+          updateServiceProvider.overrideWithValue(FakeUpdateService()),
+          identityBackupImportPortProvider.overrideWithValue(importPort),
+          userPresencePortProvider.overrideWithValue(presence),
+        ],
+      );
+      addTearDown(isolatedContainer.dispose);
+      isolatedContainer.read(sessionProvider.notifier).setSession(current);
+
+      await isolatedContainer
+          .read(appRuntimeProvider.notifier)
+          .importIdentityBackup(
+            backup: IdentityBackupSelection(
+              fileName: 'alice.awikibk',
+              bytes: Uint8List.fromList(<int>[4, 5, 6]),
+            ),
+            passphrase: 'correct horse',
+            presenceReason: 'import test backup',
+          );
+
+      expect(gateway.logoutCalls, 1);
+      expect(isolatedContainer.read(sessionProvider).session, isNull);
+      final credentials = isolatedContainer
+          .read(sessionProvider)
+          .localCredentials;
+      expect(credentials, hasLength(1));
+      expect(credentials.single.localIdentityId, 'identity-alice-imported');
+      expect(credentials.single.did, imported.did);
+      final feedback = isolatedContainer.read(uiFeedbackProvider);
+      expect(feedback?.danger, isFalse);
+      expect(feedback?.message.id, 'importSuccessSelectCredential');
     });
 
     test('无登录身份时导出提示未登录', () async {
@@ -609,6 +713,38 @@ class _RecordingIdentityExportPort implements IdentityExportPort {
       mimeType: 'application/vnd.awiki.identity-backup',
       bytes: Uint8List.fromList(<int>[1, 2, 3, 4]),
     );
+  }
+}
+
+class _RecordingIdentityBackupImportPort implements IdentityBackupImportPort {
+  _RecordingIdentityBackupImportPort({required this.outcome});
+
+  final IdentityBackupImportOutcome outcome;
+  int importCalls = 0;
+  Uint8List? lastPassphrase;
+  Uint8List? passphraseCopy;
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<IdentityBackupSummary> inspectIdentityBackup({
+    required Uint8List bytes,
+    required Uint8List passphrase,
+  }) {
+    throw UnimplementedError('inspect is not used by the runtime import');
+  }
+
+  @override
+  Future<IdentityBackupImportOutcome> importIdentityBackup({
+    required Uint8List bytes,
+    required Uint8List passphrase,
+    required bool userPresenceConfirmed,
+  }) async {
+    importCalls += 1;
+    lastPassphrase = passphrase;
+    passphraseCopy = Uint8List.fromList(passphrase);
+    return outcome;
   }
 }
 

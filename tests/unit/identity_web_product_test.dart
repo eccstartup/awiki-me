@@ -312,6 +312,15 @@ class _Documents implements IdentityDocumentCorePort {
   int resumes = 0;
 
   @override
+  Future<IdentityDocumentSummary> identityDocument(String selector) async {
+    expect(selector, _webDid);
+    return const IdentityDocumentSummary(
+      did: _webDid,
+      verificationMethods: <IdentityVerificationMethod>[],
+    );
+  }
+
+  @override
   Future<IdentityServicesSnapshot> identityServices(String selector) async {
     expect(selector, _webDid);
     return IdentityServicesSnapshot(services: services, pending: pending);
