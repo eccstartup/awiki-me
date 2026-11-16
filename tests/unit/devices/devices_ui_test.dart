@@ -1911,6 +1911,41 @@ void main() {
     expect(find.text('完成'), findsNothing);
   });
 
+  testWidgets('initial Handle and phone prefill the fresh device Join form', (
+    tester,
+  ) async {
+    final core = FakeDeviceManagementCore();
+
+    await tester.pumpWidget(
+      _app(
+        const DeviceJoinPage(
+          autoPoll: false,
+          initialHandle: ' alice.awiki.info ',
+          initialPhone: ' +8613800138000 ',
+        ),
+        core,
+        session: null,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final fields = find.byType(CupertinoTextField);
+    expect(fields, findsNWidgets(3));
+    expect(
+      tester.widget<CupertinoTextField>(fields.at(0)).controller!.text,
+      '+8613800138000',
+    );
+    expect(
+      tester.widget<CupertinoTextField>(fields.at(1)).controller!.text,
+      'alice.awiki.info',
+    );
+    expect(
+      tester.widget<CupertinoTextField>(fields.at(2)).controller!.text,
+      isEmpty,
+    );
+    expect(find.text('开始关联'), findsOneWidget);
+  });
+
   testWidgets('orphaned authorized Join returns to a fresh device Join form', (
     tester,
   ) async {
@@ -2946,6 +2981,128 @@ void main() {
     expect(find.text('待审批'), findsOneWidget);
     expect(find.text('device-new'), findsOneWidget);
     expect(core.joinRequestCalls, 1);
+  });
+
+  testWidgets('restore-identity Join keeps the DID and says the OTP only locates', (
+    tester,
+  ) async {
+    final core = FakeDeviceManagementCore();
+    await tester.pumpWidget(
+      _app(
+        const DeviceJoinPage(autoPoll: false, restoreIdentity: true),
+        core,
+        session: null,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('device-join-restore-identity-hint')),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('加入后仍是同一个身份，DID 不会改变'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'restore-identity Join removes the imported root entry only when it starts',
+    (tester) async {
+      const rootIdentity = SessionIdentity(
+        did: 'did:wba:awiki.me:users:alice:e1_root_only',
+        localIdentityId: 'identity-root',
+        credentialName: 'imported-root',
+        displayName: 'Alice',
+        handle: 'alice.awiki.me',
+        rootOnly: true,
+      );
+      final core = FakeDeviceManagementCore();
+      final gateway = FakeAwikiGateway()
+        ..localCredentials = const <SessionIdentity>[rootIdentity];
+      await tester.pumpWidget(
+        _app(
+          const DeviceJoinPage(
+            autoPoll: false,
+            restoreIdentity: true,
+            restoreIdentityDid: 'did:wba:awiki.me:users:alice:e1_root_only',
+          ),
+          core,
+          session: null,
+          gateway: gateway,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Nothing is removed while the user has only opened the Join page.
+      expect(gateway.deleteLocalCredentialCalls, 0);
+
+      final fields = find.byType(CupertinoTextField);
+      await tester.enterText(fields.at(0), '+8613800138000');
+      await tester.enterText(fields.at(1), 'alice.awiki.me');
+      await tester.enterText(fields.at(2), '987580');
+      await tester.tap(find.text('开始关联'));
+      await tester.pumpAndSettle();
+
+      expect(core.beginCalls, 1);
+      expect(gateway.deleteLocalCredentialCalls, 1);
+      expect(gateway.lastDeletedLocalCredentialSelector, 'identity-root');
+    },
+  );
+
+  testWidgets('restore-identity Join cancels when the root entry cannot go', (
+    tester,
+  ) async {
+    const rootIdentity = SessionIdentity(
+      did: 'did:wba:awiki.me:users:alice:e1_root_only',
+      localIdentityId: 'identity-root',
+      credentialName: 'imported-root',
+      displayName: 'Alice',
+      handle: 'alice.awiki.me',
+      rootOnly: true,
+    );
+    final core = FakeDeviceManagementCore();
+    final gateway = FakeAwikiGateway()
+      ..localCredentials = const <SessionIdentity>[rootIdentity]
+      ..deleteLocalCredentialError = StateError('delete failed');
+    await tester.pumpWidget(
+      _app(
+        const DeviceJoinPage(
+          autoPoll: false,
+          restoreIdentity: true,
+          restoreIdentityDid: 'did:wba:awiki.me:users:alice:e1_root_only',
+        ),
+        core,
+        session: null,
+        gateway: gateway,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final fields = find.byType(CupertinoTextField);
+    await tester.enterText(fields.at(0), '+8613800138000');
+    await tester.enterText(fields.at(1), 'alice.awiki.me');
+    await tester.enterText(fields.at(2), '987580');
+    await tester.tap(find.text('开始关联'));
+    await tester.pumpAndSettle();
+
+    expect(gateway.deleteLocalCredentialCalls, 1);
+    expect(core.cancelCalls, 1);
+  });
+
+  testWidgets('ordinary Join does not show the restore-identity hint', (
+    tester,
+  ) async {
+    final core = FakeDeviceManagementCore();
+    await tester.pumpWidget(
+      _app(const DeviceJoinPage(autoPoll: false), core, session: null),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('device-join-restore-identity-hint')),
+      findsNothing,
+    );
   });
 }
 

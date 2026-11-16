@@ -167,6 +167,10 @@ class OnboardingServerInfo {
 
   bool get supportsPhoneHandleRecovery =>
       identity.handleRecovery.supportsPhoneOtp;
+
+  /// Server declares root-signature device rebind for imported root-only DIDs.
+  bool get supportsRootSignatureDeviceRebind =>
+      identity.deviceRebind.enabled;
 }
 
 class OnboardingAgentCapabilities {
@@ -270,10 +274,12 @@ class OnboardingIdentityCapabilities {
   const OnboardingIdentityCapabilities({
     required this.handleRegistration,
     this.handleRecovery = const OnboardingHandleRecoveryCapabilities.disabled(),
+    this.deviceRebind = const OnboardingDeviceRebindCapabilities.disabled(),
   });
 
   final OnboardingHandleRegistrationCapabilities handleRegistration;
   final OnboardingHandleRecoveryCapabilities handleRecovery;
+  final OnboardingDeviceRebindCapabilities deviceRebind;
 
   factory OnboardingIdentityCapabilities.fromJson(Map<String, Object?> json) {
     return OnboardingIdentityCapabilities(
@@ -286,7 +292,64 @@ class OnboardingIdentityCapabilities {
       handleRecovery: OnboardingHandleRecoveryCapabilities.fromJson(
         json['handle_recovery'],
       ),
+      deviceRebind: OnboardingDeviceRebindCapabilities.fromJson(
+        json['device_rebind'],
+      ),
     );
+  }
+}
+
+/// `identity.device_rebind`: root-signs a replacement DID Document for an
+/// imported root-only identity. Any malformed or unsupported declaration is
+/// treated as disabled, never guessed from the server kind.
+class OnboardingDeviceRebindCapabilities {
+  const OnboardingDeviceRebindCapabilities({required this.enabled});
+
+  const OnboardingDeviceRebindCapabilities.disabled() : enabled = false;
+
+  final bool enabled;
+
+  static const String purpose = 'awiki.identity.device-rebind.v1';
+  static const String rootSignatureMethodId = 'root_signature';
+  static const String rootSignatureVerificationType =
+      'did_document_root_http_signature';
+
+  factory OnboardingDeviceRebindCapabilities.fromJson(Object? raw) {
+    if (raw is! Map) {
+      return const OnboardingDeviceRebindCapabilities.disabled();
+    }
+    final json = raw.map<String, Object?>(
+      (key, value) => MapEntry(key.toString(), value),
+    );
+    if (json['enabled'] != true) {
+      return const OnboardingDeviceRebindCapabilities.disabled();
+    }
+    final purpose = _stringValue(json['purpose']);
+    if (purpose != null && purpose != OnboardingDeviceRebindCapabilities.purpose) {
+      return const OnboardingDeviceRebindCapabilities.disabled();
+    }
+    final rawMethods = json['methods'];
+    if (rawMethods is! List || rawMethods.length != 1) {
+      return const OnboardingDeviceRebindCapabilities.disabled();
+    }
+    final method = rawMethods.single;
+    if (method is! Map) {
+      return const OnboardingDeviceRebindCapabilities.disabled();
+    }
+    if (_stringValue(method['id']) !=
+            OnboardingDeviceRebindCapabilities.rootSignatureMethodId ||
+        method['enabled'] != true) {
+      return const OnboardingDeviceRebindCapabilities.disabled();
+    }
+    final verification = method['verification'];
+    if (verification is! Map ||
+        verification['required'] != true ||
+        _stringValue(verification['type']) !=
+            OnboardingDeviceRebindCapabilities
+                .rootSignatureVerificationType) {
+      return const OnboardingDeviceRebindCapabilities.disabled();
+    }
+    return const OnboardingDeviceRebindCapabilities(enabled: true);
   }
 }
 

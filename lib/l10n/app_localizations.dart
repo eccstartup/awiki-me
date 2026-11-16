@@ -791,8 +791,14 @@ abstract class AppLocalizations {
   /// No description provided for @registrationLocalStateNeedsAttention.
   ///
   /// In zh, this message translates to:
-  /// **'本机身份状态存在冲突。请保留本机数据，在上方输入原来的 Handle，使用出现的“继续上次恢复”完成操作；如果没有该入口，请联系支持。重复注册无法解决此问题。'**
+  /// **'本机已有这个 Handle 的身份材料（例如刚导入的身份备份），但它还不能直接登录。请使用下方操作。'**
   String get registrationLocalStateNeedsAttention;
+
+  /// No description provided for @registrationLocalStateNeutralHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机已有这个 Handle 的身份材料（例如此前导入的身份备份）。继续注册不会创建新身份；请先恢复已有身份。'**
+  String get registrationLocalStateNeutralHint;
 
   /// No description provided for @registrationContinuityChanged.
   ///
@@ -2274,6 +2280,12 @@ abstract class AppLocalizations {
   /// **'需要已有管理设备确认两端的 6 位验证码'**
   String get deviceJoinEntrySubtitle;
 
+  /// No description provided for @deviceJoinRestoreIdentityHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'加入后仍是同一个身份，DID 不会改变。验证码只用于找到账号并请求已有设备批准本机，不会创建新身份。'**
+  String get deviceJoinRestoreIdentityHint;
+
   /// No description provided for @onboardingExistingHandleTitle.
   ///
   /// In zh, this message translates to:
@@ -2841,7 +2853,7 @@ abstract class AppLocalizations {
   /// No description provided for @identityBackupImportWarning.
   ///
   /// In zh, this message translates to:
-  /// **'导入会把该身份的根密钥和 DID 文档安装到本设备。消息、联系人和会话不会被恢复。同时持有文件和口令的人可以恢复此身份。'**
+  /// **'导入只安装该身份的根密钥和 DID 文档，不包含设备密钥，也不会恢复消息、联系人和会话。若本机已有该身份可用的设备凭证，导入后可以直接进入；否则需先从已授权设备加入本机或通过 Handle Recovery 才能登录。同时持有文件和口令的人可以恢复此身份。'**
   String get identityBackupImportWarning;
 
   /// No description provided for @identityBackupImportSelectFile.
@@ -6345,7 +6357,7 @@ abstract class AppLocalizations {
   /// No description provided for @importSuccessSelectCredential.
   ///
   /// In zh, this message translates to:
-  /// **'导入成功，请选择该凭证登录'**
+  /// **'导入成功。该凭证只包含身份根凭据，需从已授权设备加入本机或通过 Handle Recovery 后才能登录。'**
   String get importSuccessSelectCredential;
 
   /// No description provided for @localCredentialsRefreshed.
@@ -7221,6 +7233,198 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'旧身份升级失败，请重试。'**
   String get legacyIdentityUpgradeFailed;
+
+  /// No description provided for @legacyIdentityBackupRequiresDeviceJoin.
+  ///
+  /// In zh, this message translates to:
+  /// **'身份备份只包含 DID 根凭据，不包含设备密钥，因此这台设备还不能登录该身份。'**
+  String get legacyIdentityBackupRequiresDeviceJoin;
+
+  /// No description provided for @legacyIdentityBackupRequiresDeviceJoinHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请从已授权的设备将本机加入该身份，或通过 Handle Recovery 恢复访问后再登录。'**
+  String get legacyIdentityBackupRequiresDeviceJoinHint;
+
+  /// No description provided for @localCredentialRootOnlyBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅根凭据 · 需授权本机'**
+  String get localCredentialRootOnlyBadge;
+
+  /// No description provided for @rootOnlyIdentityTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台设备还没有登录授权'**
+  String get rootOnlyIdentityTitle;
+
+  /// No description provided for @rootOnlyIdentityMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'身份备份只包含 DID 根凭据，不包含本机设备密钥。Handle 和手机号已经属于这个身份，但服务器还不认识这台设备。可以把它加入该身份（需由已授权设备批准），或用 Handle Recovery 重新获得访问。'**
+  String get rootOnlyIdentityMessage;
+
+  /// No description provided for @rootOnlyAuthorizeDeviceAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'授权本机（设备加入）'**
+  String get rootOnlyAuthorizeDeviceAction;
+
+  /// No description provided for @rootOnlyHandleRecoveryAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'用 Handle Recovery 恢复'**
+  String get rootOnlyHandleRecoveryAction;
+
+  /// No description provided for @rootOnlyRemoveLocalIdentityTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机导入的根凭据将被移除'**
+  String get rootOnlyRemoveLocalIdentityTitle;
+
+  /// No description provided for @rootOnlyRemoveLocalIdentityMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备加入会在关联请求提交成功后移除这份不能登录的根凭据，提交前退出不影响导入；Handle Recovery 会在进入恢复页前移除。移除只影响本机，你的身份备份文件不会被删除，之后仍可再次导入。'**
+  String get rootOnlyRemoveLocalIdentityMessage;
+
+  /// No description provided for @rootOnlyRemoveLocalIdentityConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续'**
+  String get rootOnlyRemoveLocalIdentityConfirm;
+
+  /// No description provided for @registrationLocalStateOpenLoginAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'前往登录页'**
+  String get registrationLocalStateOpenLoginAction;
+
+  /// No description provided for @restoreIdentityTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复身份'**
+  String get restoreIdentityTitle;
+
+  /// No description provided for @restoreIdentityDirectEntryMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'这台设备已有该身份的可用设备凭证，可以直接进入，不需要验证码。'**
+  String get restoreIdentityDirectEntryMessage;
+
+  /// No description provided for @restoreIdentityAuthorizationRequiredMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份安装了该身份的 DID 根凭据和根私钥，但不含设备密钥；本机还不是这个 DID 的授权设备。为本机新增设备记录时 DID 保持不变，需要由该身份已登记的设备批准这次加入；服务器要求的短信验证码只用于找到账号并发出批准请求。'**
+  String get restoreIdentityAuthorizationRequiredMessage;
+
+  /// No description provided for @restoreIdentityCredentialMissingMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机已没有这个 DID 的身份材料。设备加入请求提交成功后，导入的根凭据才会被移除；备份文件不受影响，如果加入没有完成，重新导入同一备份即可继续。'**
+  String get restoreIdentityCredentialMissingMessage;
+
+  /// No description provided for @restoreIdentityDirectEnterAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'直接进入'**
+  String get restoreIdentityDirectEnterAction;
+
+  /// No description provided for @restoreIdentityRecoveryAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'改用 Handle Recovery'**
+  String get restoreIdentityRecoveryAction;
+
+  /// No description provided for @restoreIdentityRecoveryNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅在无法用已有设备批准时使用。Handle Recovery 会更换这个身份的 DID，恢复后的身份与备份中的 DID 不同。'**
+  String get restoreIdentityRecoveryNote;
+
+  /// No description provided for @restoreIdentityImportAnotherAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新导入备份'**
+  String get restoreIdentityImportAnotherAction;
+
+  /// No description provided for @restoreIdentityRebindRequiredMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份安装了该身份的 DID 根凭据和根私钥。这台设备可以直接绑定到这个 DID：由导入的根私钥签名为 DID 文档新增本机设备密钥，DID、Handle 和根私钥都不变，也不需要其他设备或短信验证码。'**
+  String get restoreIdentityRebindRequiredMessage;
+
+  /// No description provided for @restoreIdentityRebindAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'把本机绑定到这个 DID'**
+  String get restoreIdentityRebindAction;
+
+  /// No description provided for @restoreIdentityRebindNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'这会用本机新的设备密钥替换 DID 文档中现有的设备条目。DID 和 Handle 不变。'**
+  String get restoreIdentityRebindNote;
+
+  /// No description provided for @restoreIdentityRebindConfirmTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'把本机绑定到导入的 DID？'**
+  String get restoreIdentityRebindConfirmTitle;
+
+  /// No description provided for @restoreIdentityRebindConfirmMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入的根私钥将签发更新后的 DID 文档。DID 和 Handle 保持不变，本机成为已登录设备。DID 文档中当前列出的设备会被替换，那些设备需要重新加入才能继续使用这个身份。'**
+  String get restoreIdentityRebindConfirmMessage;
+
+  /// No description provided for @restoreIdentityRebindConfirmAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'绑定本机'**
+  String get restoreIdentityRebindConfirmAction;
+
+  /// No description provided for @restoreIdentityRebindPresenceReason.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认把本机绑定到导入的身份。'**
+  String get restoreIdentityRebindPresenceReason;
+
+  /// No description provided for @deviceRebindUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前构建或服务器不支持绑定本机。'**
+  String get deviceRebindUnsupported;
+
+  /// No description provided for @deviceRebindUserPresenceDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'身份验证已取消，DID 文档没有被修改。'**
+  String get deviceRebindUserPresenceDenied;
+
+  /// No description provided for @deviceRebindConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'DID 文档已在别处变更，无法从这台设备安全替换。'**
+  String get deviceRebindConflict;
+
+  /// No description provided for @deviceRebindStateChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录身份或租户已变化，绑定已取消。'**
+  String get deviceRebindStateChanged;
+
+  /// No description provided for @deviceRebindFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法更新 DID 文档来绑定本机。'**
+  String get deviceRebindFailed;
+
+  /// No description provided for @deviceRebindSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机已绑定到导入的身份，可以直接进入。'**
+  String get deviceRebindSucceeded;
 
   /// No description provided for @localCredentialDeleteRecoveryHint.
   ///

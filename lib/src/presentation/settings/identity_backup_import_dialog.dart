@@ -24,7 +24,7 @@ class IdentityBackupImportDialog extends StatefulWidget {
     String passphrase,
   )
   inspectBackup;
-  final Future<void> Function(
+  final Future<IdentityBackupImportOutcome?> Function(
     IdentityBackupSelection backup,
     String passphrase,
   )
@@ -135,9 +135,9 @@ class _IdentityBackupImportDialogState extends State<IdentityBackupImportDialog>
       _error = null;
     });
     try {
-      await widget.importBackup(backup, passphrase);
+      final outcome = await widget.importBackup(backup, passphrase);
       if (!mounted) return;
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(outcome);
     } catch (error) {
       if (!mounted) return;
       setState(() {

@@ -595,6 +595,7 @@ class DevicesController extends StateNotifier<DevicesState> {
     required String phone,
     required String otp,
     String presenceReason = 'Confirm Handle Recovery authorized Join',
+    bool ignoreLocalRecoveryScope = false,
   }) async {
     if (state.isActionPending) return false;
     final generation = ++_generation;
@@ -606,7 +607,11 @@ class DevicesController extends StateNotifier<DevicesState> {
     try {
       final deviceService = ref.read(deviceManagementServiceProvider);
       final operationId = _newOperationId('join');
-      final recoveryScope = _recoveryScopeForHandle(handle);
+      // An imported root-only credential is not a recovery context: it only
+      // holds the DID's root key, so the device still needs an ordinary Join.
+      final recoveryScope = ignoreLocalRecoveryScope
+          ? null
+          : _recoveryScopeForHandle(handle);
       final progress = recoveryScope == null
           ? await deviceService.beginNewDeviceJoinWithSms(
               handle: handle,

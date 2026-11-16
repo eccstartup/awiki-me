@@ -13,6 +13,7 @@ import 'package:awiki_me/src/app/ui_feedback.dart';
 import 'package:awiki_me/src/domain/entities/session_identity.dart';
 import 'package:awiki_me/src/presentation/app_shell/providers/app_runtime_provider.dart';
 import 'package:awiki_me/src/presentation/app_shell/providers/session_provider.dart';
+import 'package:awiki_me/src/presentation/onboarding/restore_identity_provider.dart';
 import 'package:awiki_me/src/presentation/friends/friends_navigation_provider.dart';
 import 'package:awiki_me/src/presentation/conversation_list/conversation_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -145,7 +146,7 @@ void main() {
       addTearDown(isolatedContainer.dispose);
       isolatedContainer.read(sessionProvider.notifier).setSession(current);
 
-      await isolatedContainer
+      final outcome = await isolatedContainer
           .read(appRuntimeProvider.notifier)
           .importIdentityBackup(
             backup: IdentityBackupSelection(
@@ -156,6 +157,8 @@ void main() {
             presenceReason: 'import test backup',
           );
 
+      expect(outcome?.identityId, 'identity-alice-imported');
+      expect(outcome?.alreadyPresent, isFalse);
       expect(gateway.logoutCalls, 1);
       expect(isolatedContainer.read(sessionProvider).session, isNull);
       final credentials = isolatedContainer
@@ -164,9 +167,71 @@ void main() {
       expect(credentials, hasLength(1));
       expect(credentials.single.localIdentityId, 'identity-alice-imported');
       expect(credentials.single.did, imported.did);
-      final feedback = isolatedContainer.read(uiFeedbackProvider);
-      expect(feedback?.danger, isFalse);
-      expect(feedback?.message.id, 'importSuccessSelectCredential');
+      expect(isolatedContainer.read(uiFeedbackProvider), isNull);
+      final intent = isolatedContainer.read(restoreIdentityProvider);
+      expect(intent?.identityId, 'identity-alice-imported');
+      expect(intent?.did, imported.did);
+      expect(intent?.alreadyPresent, isFalse);
+    });
+
+    test('未登录时导入身份后刷新可选本地凭证', () async {
+      const imported = SessionIdentity(
+        did: 'did:wba:awiki.info:users:alice-imported',
+        localIdentityId: 'identity-alice-imported',
+        credentialName: 'alice-imported',
+        displayName: 'Alice Imported',
+        handle: 'alice.awiki.info',
+        jwtToken: 'token-imported',
+      );
+      gateway.localCredentials = const <SessionIdentity>[imported];
+      final importPort = _RecordingIdentityBackupImportPort(
+        outcome: const IdentityBackupImportOutcome(
+          identityId: 'identity-alice-imported',
+          did: 'did:wba:awiki.info:users:alice-imported',
+          rootKeyId: 'did:wba:awiki.info:users:alice-imported#root',
+          alreadyPresent: false,
+        ),
+      );
+      final presence = _RecordingUserPresence(result: true);
+      final isolatedContainer = ProviderContainer(
+        overrides: <Override>[
+          awikiAccountGatewayProvider.overrideWithValue(gateway),
+          ...fakeApplicationServiceOverrides(gateway),
+          realtimeGatewayProvider.overrideWithValue(FakeRealtimeGateway()),
+          notificationFacadeProvider.overrideWithValue(
+            FakeNotificationFacade(),
+          ),
+          updateServiceProvider.overrideWithValue(FakeUpdateService()),
+          identityBackupImportPortProvider.overrideWithValue(importPort),
+          userPresencePortProvider.overrideWithValue(presence),
+        ],
+      );
+      addTearDown(isolatedContainer.dispose);
+
+      final outcome = await isolatedContainer
+          .read(appRuntimeProvider.notifier)
+          .importIdentityBackup(
+            backup: IdentityBackupSelection(
+              fileName: 'alice.awikibk',
+              bytes: Uint8List.fromList(<int>[7, 8, 9]),
+            ),
+            passphrase: 'correct horse',
+            presenceReason: 'import test backup',
+          );
+
+      expect(importPort.importCalls, 1);
+      expect(outcome?.alreadyPresent, isFalse);
+      expect(isolatedContainer.read(sessionProvider).session, isNull);
+      final credentials = isolatedContainer
+          .read(sessionProvider)
+          .localCredentials;
+      expect(credentials, hasLength(1));
+      expect(credentials.single.localIdentityId, 'identity-alice-imported');
+      expect(isolatedContainer.read(uiFeedbackProvider), isNull);
+      expect(
+        isolatedContainer.read(restoreIdentityProvider)?.did,
+        'did:wba:awiki.info:users:alice-imported',
+      );
     });
 
     test('无登录身份时导出提示未登录', () async {

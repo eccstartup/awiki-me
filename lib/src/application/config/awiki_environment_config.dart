@@ -13,6 +13,10 @@ const bool defaultMultiDeviceDeviceRevokeEnabled = bool.fromEnvironment(
   'AWIKI_MULTI_DEVICE_DEVICE_REVOKE_ENABLED',
   defaultValue: true,
 );
+const bool defaultMultiDeviceDeviceRebindEnabled = bool.fromEnvironment(
+  'AWIKI_MULTI_DEVICE_DEVICE_REBIND_ENABLED',
+  defaultValue: true,
+);
 const bool defaultMultiDeviceDirectE2eeEnabled = bool.fromEnvironment(
   'AWIKI_MULTI_DEVICE_DIRECT_E2EE_ENABLED',
   defaultValue: true,
@@ -57,6 +61,7 @@ class AwikiEnvironmentConfig {
     String? releasesUrl,
     bool? agentImEnabled,
     bool? multiDeviceDeviceRevokeEnabled,
+    bool? multiDeviceDeviceRebindEnabled,
     bool? multiDeviceDirectE2eeEnabled,
     bool? multiDeviceGroupE2eeEnabled,
     String? multiDeviceAudience,
@@ -111,6 +116,8 @@ class AwikiEnvironmentConfig {
         );
     this.multiDeviceDeviceRevokeEnabled =
         multiDeviceDeviceRevokeEnabled ?? defaultMultiDeviceDeviceRevokeEnabled;
+    this.multiDeviceDeviceRebindEnabled =
+        multiDeviceDeviceRebindEnabled ?? defaultMultiDeviceDeviceRebindEnabled;
     this.multiDeviceDirectE2eeEnabled =
         multiDeviceDirectE2eeEnabled ?? defaultMultiDeviceDirectE2eeEnabled;
     this.multiDeviceGroupE2eeEnabled =
@@ -141,6 +148,7 @@ class AwikiEnvironmentConfig {
   late final String releasesUrl;
   late final bool agentImEnabled;
   late final bool multiDeviceDeviceRevokeEnabled;
+  late final bool multiDeviceDeviceRebindEnabled;
   late final bool multiDeviceDirectE2eeEnabled;
   late final bool multiDeviceGroupE2eeEnabled;
   late final String multiDeviceAudience;

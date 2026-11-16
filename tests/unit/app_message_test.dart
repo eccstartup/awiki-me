@@ -111,8 +111,10 @@ void main() {
       ),
     );
     expect(message, AppMessage.registrationLocalStateNeedsAttention());
-    expect(message.resolve(AppLocalizationsZh()), contains('输入原来的 Handle'));
-    expect(message.resolve(AppLocalizationsEn()), contains('original Handle'));
+    expect(message.resolve(AppLocalizationsZh()), contains('还不能直接登录'));
+    expect(message.resolve(AppLocalizationsZh()), contains('下方操作'));
+    expect(message.resolve(AppLocalizationsEn()), contains('cannot sign in'));
+    expect(message.resolve(AppLocalizationsEn()), contains('actions below'));
   });
 
   test(

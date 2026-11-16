@@ -19,6 +19,9 @@ class _MacOnboardingScaffold extends StatelessWidget {
     required this.handleController,
     required this.onLogin,
     required this.onDeleteCredential,
+    required this.onRestoreCredential,
+    required this.restoreActions,
+    required this.onRestoreIdentityEntry,
     required this.onAuthModeChanged,
     required this.onRequestOtp,
     required this.onRequestEmailActivation,
@@ -42,6 +45,9 @@ class _MacOnboardingScaffold extends StatelessWidget {
   final TextEditingController handleController;
   final Future<void> Function(String credentialName) onLogin;
   final ValueChanged<SessionIdentity> onDeleteCredential;
+  final ValueChanged<SessionIdentity> onRestoreCredential;
+  final _RestoreIdentityActions restoreActions;
+  final VoidCallback onRestoreIdentityEntry;
   final ValueChanged<String> onAuthModeChanged;
   final VoidCallback onRequestOtp;
   final VoidCallback onRequestEmailActivation;
@@ -112,6 +118,9 @@ class _MacOnboardingScaffold extends StatelessWidget {
                           handleController: handleController,
                           onLogin: onLogin,
                           onDeleteCredential: onDeleteCredential,
+                          onRestoreCredential: onRestoreCredential,
+                          restoreActions: restoreActions,
+                          onRestoreIdentityEntry: onRestoreIdentityEntry,
                           onAuthModeChanged: onAuthModeChanged,
                           onRequestOtp: onRequestOtp,
                           onRequestEmailActivation: onRequestEmailActivation,
@@ -387,6 +396,9 @@ class _MacAuthCard extends ConsumerWidget {
     required this.handleController,
     required this.onLogin,
     required this.onDeleteCredential,
+    required this.onRestoreCredential,
+    required this.restoreActions,
+    required this.onRestoreIdentityEntry,
     required this.onAuthModeChanged,
     required this.onRequestOtp,
     required this.onRequestEmailActivation,
@@ -408,6 +420,9 @@ class _MacAuthCard extends ConsumerWidget {
   final TextEditingController handleController;
   final Future<void> Function(String credentialName) onLogin;
   final ValueChanged<SessionIdentity> onDeleteCredential;
+  final ValueChanged<SessionIdentity> onRestoreCredential;
+  final _RestoreIdentityActions restoreActions;
+  final VoidCallback onRestoreIdentityEntry;
   final ValueChanged<String> onAuthModeChanged;
   final VoidCallback onRequestOtp;
   final VoidCallback onRequestEmailActivation;
@@ -417,6 +432,12 @@ class _MacAuthCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final showIdentities = onboarding.entryMode == 'login';
+    final importSupported = ref
+        .watch(identityBackupImportServiceProvider)
+        .isSupported;
+    final restoreView = showIdentities
+        ? ref.watch(restoreIdentityViewProvider)
+        : null;
     return Container(
       key: const Key('onboarding-mac-auth-card'),
       constraints: BoxConstraints(maxWidth: 336, maxHeight: maxHeight),
@@ -440,7 +461,12 @@ class _MacAuthCard extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             if (showIdentities)
-              if (credentials.isEmpty)
+              if (restoreView != null)
+                _RestoreIdentityPanel(
+                  actionsEnabled: !onboarding.isBusy,
+                  actions: restoreActions,
+                )
+              else if (credentials.isEmpty)
                 _OnboardingCapabilityPanel(
                   icon: CupertinoIcons.person_crop_circle,
                   message: context.l10n.noLocalCredentialsFound,
@@ -450,6 +476,7 @@ class _MacAuthCard extends ConsumerWidget {
                   credentials: credentials,
                   onLogin: onLogin,
                   onDeleteCredential: onDeleteCredential,
+                  onRestoreCredential: onRestoreCredential,
                   actionsEnabled: !onboarding.isBusy,
                   deletingIdentitySelector:
                       onboarding.deletingLocalIdentitySelector,
@@ -480,6 +507,19 @@ class _MacAuthCard extends ConsumerWidget {
                 onRequestEmailActivation: onRequestEmailActivation,
                 onCheckEmailActivation: onCheckEmailActivation,
                 onSubmitRegister: onSubmitRegister,
+              ),
+            ],
+            if (importSupported) ...<Widget>[
+              const SizedBox(height: 22),
+              Container(height: 1, color: context.awikiTheme.border),
+              const SizedBox(height: 14),
+              _MacSecondaryAction(
+                key: const Key('onboarding-restore-identity-entry'),
+                label: context.l10n.restoreIdentityTitle,
+                onPressed:
+                    onboarding.isBusy || registrationSubmitting || otpRequesting
+                    ? null
+                    : onRestoreIdentityEntry,
               ),
             ],
           ],
@@ -659,6 +699,7 @@ class _OnboardingLocalIdentitySection extends StatelessWidget {
     required this.credentials,
     required this.onLogin,
     required this.onDeleteCredential,
+    required this.onRestoreCredential,
     required this.actionsEnabled,
     this.deletingIdentitySelector,
   });
@@ -666,6 +707,7 @@ class _OnboardingLocalIdentitySection extends StatelessWidget {
   final List<SessionIdentity> credentials;
   final Future<void> Function(String credentialName) onLogin;
   final ValueChanged<SessionIdentity> onDeleteCredential;
+  final ValueChanged<SessionIdentity> onRestoreCredential;
   final bool actionsEnabled;
   final String? deletingIdentitySelector;
 
@@ -692,6 +734,7 @@ class _OnboardingLocalIdentitySection extends StatelessWidget {
                       deletingIdentitySelector ==
                       identity.localIdentitySelector,
                   onLogin: () => onLogin(identity.credentialName),
+                  onRestoreCredential: () => onRestoreCredential(identity),
                   onDelete: () => onDeleteCredential(identity),
                 ),
               ],
@@ -709,6 +752,7 @@ class _OnboardingCredentialTile extends StatelessWidget {
     required this.actionsEnabled,
     required this.isDeleting,
     required this.onLogin,
+    required this.onRestoreCredential,
     required this.onDelete,
   });
 
@@ -716,6 +760,7 @@ class _OnboardingCredentialTile extends StatelessWidget {
   final bool actionsEnabled;
   final bool isDeleting;
   final VoidCallback onLogin;
+  final VoidCallback onRestoreCredential;
   final VoidCallback onDelete;
 
   @override
@@ -746,8 +791,12 @@ class _OnboardingCredentialTile extends StatelessWidget {
                 key: Key(
                   'onboarding-local-credential-select:${identity.credentialName}',
                 ),
-                onTap: enabled ? onLogin : null,
-                semanticLabel: '${context.l10n.onboardingLogin}: $displayName',
+                onTap: enabled
+                    ? (identity.rootOnly ? onRestoreCredential : onLogin)
+                    : null,
+                semanticLabel: identity.rootOnly
+                    ? '${context.l10n.restoreIdentityTitle}: $displayName'
+                    : '${context.l10n.onboardingLogin}: $displayName',
                 semanticsIdentifier:
                     'onboarding-local-credential-select:${identity.credentialName}',
                 borderRadius: const BorderRadius.horizontal(
@@ -792,6 +841,22 @@ class _OnboardingCredentialTile extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            if (identity.rootOnly) ...<Widget>[
+                              const SizedBox(height: 6),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: AppPill(
+                                  key: Key(
+                                    'onboarding-local-credential-root-only:${identity.credentialName}',
+                                  ),
+                                  label:
+                                      context.l10n.localCredentialRootOnlyBadge,
+                                  backgroundColor:
+                                      context.awikiTheme.warningContainer,
+                                  foregroundColor: context.awikiTheme.title,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -1275,7 +1340,7 @@ class _MacPrimaryAction extends StatelessWidget {
 }
 
 class _MacSecondaryAction extends StatelessWidget {
-  const _MacSecondaryAction({required this.label, this.onPressed});
+  const _MacSecondaryAction({super.key, required this.label, this.onPressed});
 
   final String label;
   final VoidCallback? onPressed;

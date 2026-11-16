@@ -15,6 +15,7 @@ import '../../../app/app_services.dart';
 import '../../../app/ui_feedback.dart';
 import '../../../application/app_session_service.dart';
 import '../../../application/identity_backup_import_service.dart';
+import '../../../application/ports/device_rebind_port.dart';
 import '../../../application/ports/identity_backup_import_port.dart';
 import '../../../core/app_error_classifier.dart';
 import '../../../core/performance_logger.dart';
@@ -42,6 +43,7 @@ import '../../devices/devices_provider.dart';
 import '../../devices/device_capability_provider.dart';
 import '../../friends/friends_provider.dart';
 import '../../group/group_provider.dart';
+import '../../onboarding/restore_identity_provider.dart';
 import '../../profile/peer_display_profile_provider.dart';
 import '../../profile/peer_profile_provider.dart';
 import '../../profile/profile_provider.dart';
@@ -825,6 +827,20 @@ class AppRuntimeController extends StateNotifier<AppRuntimeState> {
     }
   }
 
+  /// Removes the imported root-only entry once a Device Join has actually been
+  /// requested. Core refuses to finalize a Join while a root-only entry with
+  /// the same DID is still installed, and that finalization starts as soon as
+  /// the managing device approves. Returns true when nothing is left to remove.
+  Future<bool> removeRestoredRootCredential({required String did}) async {
+    final normalizedDid = did.trim();
+    if (normalizedDid.isEmpty) return true;
+    for (final identity in ref.read(sessionProvider).localCredentials) {
+      if (!identity.rootOnly || identity.did.trim() != normalizedDid) continue;
+      return deleteLocalCredential(identity);
+    }
+    return true;
+  }
+
   void _clearAuthenticatedUiState() {
     _deactivateRemotePushMessageSync();
     _stopForegroundCatchUp();
@@ -977,61 +993,110 @@ class AppRuntimeController extends StateNotifier<AppRuntimeState> {
       'identity_export.user_presence_denied' ||
       'identity_export.user_presence_failed' =>
         AppMessage.identityExportUserPresenceDenied(),
-      'identity_export.state_changed' => AppMessage.identityExportStateChanged(),
+      'identity_export.state_changed' =>
+        AppMessage.identityExportStateChanged(),
       'identity_export.save_failed' => AppMessage.documentSaveFailed(),
       _ => AppMessage.identityExportFailed(),
     };
   }
 
-  Future<void> importIdentityBackup({
+  Future<IdentityBackupImportOutcome?> importIdentityBackup({
     required IdentityBackupSelection backup,
     required String passphrase,
     required String presenceReason,
   }) async {
     final sessionState = ref.read(sessionProvider);
     final epoch = sessionState.activeEpoch;
-    try {
-      final outcome = await ref
-          .read(identityBackupImportServiceProvider)
-          .importBackup(
-            backup: backup,
-            passphrase: passphrase,
-            presenceReason: presenceReason,
-            isContextCurrent: () {
-              if (!mounted || epoch == null) return false;
-              return epoch.matches(ref.read(sessionProvider));
-            },
-          );
-      if (!mounted) return;
-      if (outcome.alreadyPresent &&
-          _sameLocalIdentityId(
-            ref.read(sessionProvider).session,
-            outcome.identityId,
-          )) {
-        ref
-            .read(uiFeedbackProvider.notifier)
-            .showInfo(AppMessage.identityBackupImportAlreadyPresent());
-        return;
-      }
-      await logout();
-      if (!mounted) return;
-      final credentials = await _localCredentialsFor(ref);
-      if (!mounted) return;
-      ref.read(sessionProvider.notifier).setLocalCredentials(credentials);
+    final tenantId = ref.read(activeAppTenantProvider).id;
+    final outcome = await ref
+        .read(identityBackupImportServiceProvider)
+        .importBackup(
+          backup: backup,
+          passphrase: passphrase,
+          presenceReason: presenceReason,
+          isContextCurrent: () {
+            if (!mounted) return false;
+            if (ref.read(activeAppTenantProvider).id != tenantId) {
+              return false;
+            }
+            final current = ref.read(sessionProvider);
+            // Importing while signed out is a first-device restore; it only
+            // has to stay in the same tenant with no session appearing.
+            return epoch == null
+                ? current.activeEpoch == null
+                : epoch.matches(current);
+          },
+        );
+    if (!mounted) return null;
+    if (outcome.alreadyPresent &&
+        _sameLocalIdentityId(
+          ref.read(sessionProvider).session,
+          outcome.identityId,
+        )) {
       ref
           .read(uiFeedbackProvider.notifier)
-          .showInfo(AppMessage.importSuccessSelectCredential());
-    } on IdentityBackupImportException catch (error) {
-      if (!mounted) return;
-      ref
-          .read(uiFeedbackProvider.notifier)
-          .showError(_identityBackupImportMessage(error));
-    } catch (_) {
-      if (!mounted) return;
-      ref
-          .read(uiFeedbackProvider.notifier)
-          .showError(AppMessage.identityBackupImportFailed());
+          .showInfo(AppMessage.identityBackupImportAlreadyPresent());
+      return outcome;
     }
+    if (!outcome.alreadyPresent) {
+      try {
+        await logout();
+        if (!mounted) return null;
+        final credentials = await _localCredentialsFor(ref);
+        if (!mounted) return null;
+        ref.read(sessionProvider.notifier).setLocalCredentials(credentials);
+      } catch (_) {
+        // Identity material is already installed; a failed credential refresh
+        // must not be reported as an import failure. The restore panel offers
+        // an explicit refresh instead.
+      }
+      if (!mounted) return null;
+    }
+    ref.read(restoreIdentityProvider.notifier).beginFromOutcome(outcome);
+    return outcome;
+  }
+
+  /// Binds this device to the imported root-only DID. The DID, Handle and root
+  /// key never change; on success only the local credential projection is
+  /// refreshed, so the restore panel flips to direct entry by the same exact
+  /// local identity ID.
+  Future<DeviceRebindOutcome?> rebindRestoredIdentity({
+    required String identityId,
+    required String did,
+    required String presenceReason,
+  }) async {
+    final sessionState = ref.read(sessionProvider);
+    final epoch = sessionState.activeEpoch;
+    final tenantId = ref.read(activeAppTenantProvider).id;
+    final outcome = await ref
+        .read(deviceRebindServiceProvider)
+        .rebind(
+          identityId: identityId,
+          expectedDid: did,
+          presenceReason: presenceReason,
+          contextStillValid: () {
+            if (!mounted) return false;
+            if (ref.read(activeAppTenantProvider).id != tenantId) {
+              return false;
+            }
+            final current = ref.read(sessionProvider);
+            return epoch == null
+                ? current.activeEpoch == null
+                : epoch.matches(current);
+          },
+        );
+    if (!mounted) return null;
+    try {
+      final credentials = await _localCredentialsFor(ref);
+      if (mounted) {
+        ref.read(sessionProvider.notifier).setLocalCredentials(credentials);
+      }
+    } catch (_) {
+      // The DID document is already updated; a failed credential refresh must
+      // not be reported as a failed bind. The restore panel keeps offering
+      // the same idempotent action.
+    }
+    return outcome;
   }
 
   bool _sameLocalIdentityId(SessionIdentity? session, String identityId) {
@@ -1039,35 +1104,6 @@ class AppRuntimeController extends StateNotifier<AppRuntimeState> {
     return currentId != null &&
         currentId.isNotEmpty &&
         currentId == identityId.trim();
-  }
-
-  AppMessage _identityBackupImportMessage(
-    IdentityBackupImportException error,
-  ) {
-    return switch (error.code) {
-      'identity_backup_import.unsupported' =>
-        AppMessage.identityBackupImportUnsupported(),
-      'identity_backup_import.invalid_file' ||
-      'identity_backup_bad_magic' ||
-      'identity_backup_unsupported_version' ||
-      'identity_backup_payload_invalid' =>
-        AppMessage.identityBackupImportInvalidFile(),
-      'identity_backup_import.too_large' ||
-      'identity_backup_too_large' => AppMessage.identityBackupImportTooLarge(),
-      'identity_backup_import.passphrase_required' ||
-      'identity_backup_bad_passphrase' =>
-        AppMessage.identityBackupImportBadPassphrase(),
-      'identity_backup_unsupported_custody' =>
-        AppMessage.identityBackupImportUnsupportedCustody(),
-      'identity_backup_import.conflict' =>
-        AppMessage.identityBackupImportConflict(),
-      'identity_backup_import.user_presence_denied' ||
-      'identity_backup_import.user_presence_failed' =>
-        AppMessage.identityBackupImportUserPresenceDenied(),
-      'identity_backup_import.state_changed' =>
-        AppMessage.identityBackupImportStateChanged(),
-      _ => AppMessage.identityBackupImportFailed(),
-    };
   }
 
   Future<void> _refreshAuthenticatedData(SessionEpoch epoch) async {

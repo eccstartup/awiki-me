@@ -35,6 +35,7 @@ import '../application/ports/group_encryption_core_port.dart';
 import '../application/ports/handle_recovery_core_port.dart';
 import '../application/ports/identity_core_port.dart';
 import '../application/ports/identity_export_port.dart';
+import '../application/ports/device_rebind_port.dart';
 import '../application/ports/identity_backup_import_port.dart';
 import '../application/ports/legacy_registry_epoch_adoption_port.dart';
 import '../application/ports/personal_agent_binding_port.dart';
@@ -55,6 +56,7 @@ import '../data/im_core/awiki_im_core_config.dart';
 import '../data/im_core/awiki_im_core_conversation_adapter.dart';
 import '../data/im_core/awiki_im_core_directory_adapter.dart';
 import '../data/im_core/awiki_im_core_device_management_adapter.dart';
+import '../data/im_core/awiki_im_core_device_rebind_adapter.dart';
 import '../data/im_core/awiki_im_core_group_adapter.dart';
 import '../data/im_core/awiki_im_core_group_encryption_adapter.dart';
 import '../data/im_core/awiki_im_core_handle_recovery_adapter.dart';
@@ -130,6 +132,7 @@ class AppBootstrap {
     this.rootKeyTransferPort,
     this.identityExportPort,
     this.identityBackupImportPort,
+    this.deviceRebindPort,
     this.groupEncryptionCorePort,
     this.handleRecoveryCorePort,
     this.legacyRegistryEpochAdoptionPort,
@@ -176,6 +179,7 @@ class AppBootstrap {
   final RootKeyTransferPort? rootKeyTransferPort;
   final IdentityExportPort? identityExportPort;
   final IdentityBackupImportPort? identityBackupImportPort;
+  final DeviceRebindPort? deviceRebindPort;
   final GroupEncryptionCorePort? groupEncryptionCorePort;
   final HandleRecoveryCorePort? handleRecoveryCorePort;
   final LegacyRegistryEpochAdoptionPort? legacyRegistryEpochAdoptionPort;
@@ -291,6 +295,8 @@ class AppBootstrap {
       ),
       multiDeviceDeviceRevokeEnabled:
           effectiveEnvironment.multiDeviceDeviceRevokeEnabled,
+      multiDeviceDeviceRebindEnabled:
+          effectiveEnvironment.multiDeviceDeviceRebindEnabled,
       multiDeviceDirectE2eeEnabled:
           effectiveEnvironment.multiDeviceDirectE2eeEnabled,
       multiDeviceGroupE2eeEnabled:
@@ -344,6 +350,10 @@ class AppBootstrap {
       );
       final identityBackupImportAdapter =
           AwikiImCoreIdentityBackupImportAdapter(runtime: runtime);
+      final deviceRebindAdapter = effectiveEnvironment
+              .multiDeviceDeviceRebindEnabled
+          ? AwikiImCoreDeviceRebindAdapter(runtime: runtime)
+          : null;
       final handleRecoveryAdapter = AwikiImCoreHandleRecoveryAdapter(
         runtime: runtime,
       );
@@ -502,6 +512,7 @@ class AppBootstrap {
         rootKeyTransferPort: rootKeyTransferAdapter,
         identityExportPort: identityExportAdapter,
         identityBackupImportPort: identityBackupImportAdapter,
+        deviceRebindPort: deviceRebindAdapter,
         groupEncryptionCorePort: groupEncryptionAdapter,
         handleRecoveryCorePort: handleRecoveryAdapter,
         legacyRegistryEpochAdoptionPort: handleRecoveryAdapter,
@@ -609,6 +620,7 @@ class AppBootstrap {
       rootKeyTransferPort: rootKeyTransferPort,
       identityExportPort: identityExportPort,
       identityBackupImportPort: identityBackupImportPort,
+      deviceRebindPort: deviceRebindPort,
       groupEncryptionCorePort: groupEncryptionCorePort,
       handleRecoveryCorePort: handleRecoveryCorePort,
       legacyRegistryEpochAdoptionPort: legacyRegistryEpochAdoptionPort,

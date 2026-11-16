@@ -154,6 +154,7 @@ void main() {
       identity,
       authenticated: true,
       jwtToken: 'jwt-123',
+      rootOnly: true,
     );
     final legacy = mapper.legacySessionFromAppSession(session);
 
@@ -161,8 +162,11 @@ void main() {
     expect(session.displayName, 'Alice');
     expect(session.authenticated, isTrue);
     expect(session.jwtToken, 'jwt-123');
+    expect(session.rootOnly, isTrue);
     expect(legacy.credentialName, 'alice-local');
     expect(legacy.jwtToken, 'jwt-123');
+    expect(legacy.rootOnly, isTrue);
+    expect(mapper.appSessionFromIdentity(identity).rootOnly, isFalse);
   });
 
   test('active sync account binding maps every typed SDK field', () {

@@ -34,6 +34,7 @@ class AwikiImCoreMappers {
     bool authenticated = false,
     DateTime? expiresAt,
     String? jwtToken,
+    bool rootOnly = false,
   }) {
     return AppSession(
       did: identity.did,
@@ -48,6 +49,7 @@ class AwikiImCoreMappers {
       authenticated: authenticated,
       expiresAt: expiresAt,
       jwtToken: jwtToken,
+      rootOnly: rootOnly,
     );
   }
 

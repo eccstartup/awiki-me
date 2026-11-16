@@ -151,6 +151,84 @@ void main() {
   );
 
   testWidgets(
+    'pending registration is hidden when its method is available anyway',
+    (tester) async {
+      tester.view.physicalSize = const Size(440, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final identities = FakeIdentityCorePort(
+        creationMethods: const [
+          IdentityDidMethod.wba,
+          IdentityDidMethod.web,
+        ],
+        pendingRegistrations: const [_pending],
+      );
+
+      await tester.pumpWidget(
+        buildLocalizedTestApp(
+          home: const OnboardingPage(),
+          providerOverrides: [
+            identityCorePortProvider.overrideWithValue(identities),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('identity-registration-pending-alice.awiki.ai')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('identity-registration-resume-hint')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('identity-method-web')), findsWidgets);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'local identity material hides the pending registration for the same Handle',
+    (tester) async {
+      tester.view.physicalSize = const Size(440, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      const localIdentity = SessionIdentity(
+        did: 'did:wba:awiki.ai:users:alice:e1_root_only',
+        localIdentityId: 'identity-root',
+        credentialName: 'imported-root',
+        displayName: 'Alice',
+        handle: 'alice.awiki.ai',
+        rootOnly: true,
+      );
+      final identities = FakeIdentityCorePort(
+        creationMethods: const [IdentityDidMethod.wba],
+        pendingRegistrations: const [_pending],
+      );
+
+      await tester.pumpWidget(
+        buildLocalizedTestApp(
+          home: const OnboardingPage(),
+          gateway: FakeAwikiGateway()
+            ..localCredentials = const <SessionIdentity>[localIdentity],
+          providerOverrides: [
+            identityCorePortProvider.overrideWithValue(identities),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('identity-registration-pending-alice.awiki.ai')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'Web service update preserves protected entries and resumes after reopening',
     (tester) async {
       final documents = _Documents();

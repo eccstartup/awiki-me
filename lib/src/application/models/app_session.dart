@@ -15,6 +15,7 @@ class AppSession {
     this.expiresAt,
     this.jwtToken,
     this.accountBinding,
+    this.rootOnly = false,
   });
 
   final String did;
@@ -25,6 +26,11 @@ class AppSession {
   final bool authenticated;
   final DateTime? expiresAt;
   final String? jwtToken;
+
+  /// True when Core reports this local identity as `rootOnly`: it holds the
+  /// imported DID root credential but no device keys, so it can never log in
+  /// until a Device Join or Handle Recovery authorizes this machine.
+  final bool rootOnly;
 
   /// Filled from `AwikiImClient.activeSyncAccountBinding()` after switch.
   /// Never derive this value from the fields above.
@@ -46,6 +52,7 @@ class AppSession {
     DateTime? expiresAt,
     String? jwtToken,
     SessionAccountBinding? accountBinding,
+    bool? rootOnly,
     bool clearExpiresAt = false,
     bool clearJwtToken = false,
   }) {
@@ -59,6 +66,7 @@ class AppSession {
       expiresAt: clearExpiresAt ? null : (expiresAt ?? this.expiresAt),
       jwtToken: clearJwtToken ? null : (jwtToken ?? this.jwtToken),
       accountBinding: accountBinding ?? this.accountBinding,
+      rootOnly: rootOnly ?? this.rootOnly,
     );
   }
 }
@@ -73,6 +81,7 @@ extension AppSessionLegacyIdentity on AppSession {
       handle: handle,
       jwtToken: jwtToken,
       accountBinding: accountBinding,
+      rootOnly: rootOnly,
     );
   }
 }

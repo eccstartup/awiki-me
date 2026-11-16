@@ -206,6 +206,24 @@ class AppMessage {
   factory AppMessage.identityBackupImportAlreadyPresent() =>
       const AppMessage._('identityBackupImportAlreadyPresent');
 
+  factory AppMessage.deviceRebindUnsupported() =>
+      const AppMessage._('deviceRebindUnsupported');
+
+  factory AppMessage.deviceRebindUserPresenceDenied() =>
+      const AppMessage._('deviceRebindUserPresenceDenied');
+
+  factory AppMessage.deviceRebindConflict() =>
+      const AppMessage._('deviceRebindConflict');
+
+  factory AppMessage.deviceRebindStateChanged() =>
+      const AppMessage._('deviceRebindStateChanged');
+
+  factory AppMessage.deviceRebindFailed() =>
+      const AppMessage._('deviceRebindFailed');
+
+  factory AppMessage.deviceRebindSucceeded() =>
+      const AppMessage._('deviceRebindSucceeded');
+
   factory AppMessage.credentialPackFailed() =>
       const AppMessage._('credentialPackFailed');
 
@@ -628,6 +646,18 @@ class AppMessage {
         return l10n.identityBackupImportFailed;
       case 'identityBackupImportAlreadyPresent':
         return l10n.identityBackupImportAlreadyPresent;
+      case 'deviceRebindUnsupported':
+        return l10n.deviceRebindUnsupported;
+      case 'deviceRebindUserPresenceDenied':
+        return l10n.deviceRebindUserPresenceDenied;
+      case 'deviceRebindConflict':
+        return l10n.deviceRebindConflict;
+      case 'deviceRebindStateChanged':
+        return l10n.deviceRebindStateChanged;
+      case 'deviceRebindFailed':
+        return l10n.deviceRebindFailed;
+      case 'deviceRebindSucceeded':
+        return l10n.deviceRebindSucceeded;
       case 'credentialPackFailed':
         return l10n.credentialPackFailed;
       case 'localCredentialDirectoryMissing':
@@ -777,6 +807,18 @@ class AppMessage {
         return 'Could not import the identity backup.';
       case 'identityBackupImportAlreadyPresent':
         return 'This identity is already on this device and is signed in.';
+      case 'deviceRebindUnsupported':
+        return 'Binding this device is not available in this build or on this server.';
+      case 'deviceRebindUserPresenceDenied':
+        return 'Identity verification was cancelled. The DID document was not changed.';
+      case 'deviceRebindConflict':
+        return 'The DID document changed elsewhere and cannot be replaced safely from this device.';
+      case 'deviceRebindStateChanged':
+        return 'The signed-in identity or tenant changed. Binding was cancelled.';
+      case 'deviceRebindFailed':
+        return 'Could not update the DID document to bind this device.';
+      case 'deviceRebindSucceeded':
+        return 'This device is now bound to the imported identity. You can enter directly.';
       case 'otpSent':
         return 'Verification code sent. Please check your messages.';
       case 'otpRateLimited':
@@ -788,7 +830,7 @@ class AppMessage {
       case 'registrationRecoveryStateInvalid':
         return "This Handle's identity state needs server-side attention. Contact support before trying again.";
       case 'registrationLocalStateNeedsAttention':
-        return 'This device has conflicting identity state. Keep its local data, enter the original Handle, and continue the previous recovery. Contact support if that option does not appear. Registering again will not resolve it.';
+        return 'This device already holds identity material for this Handle (for example an imported identity backup), but it cannot sign in with it yet. Use the actions below.';
       case 'registrationContinuityChanged':
         return 'Identity continuity changed. Send a new verification code and try again.';
       case 'registrationJoinTerminalWait':

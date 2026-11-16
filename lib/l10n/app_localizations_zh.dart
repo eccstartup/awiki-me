@@ -377,7 +377,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get registrationLocalStateNeedsAttention =>
-      '本机身份状态存在冲突。请保留本机数据，在上方输入原来的 Handle，使用出现的“继续上次恢复”完成操作；如果没有该入口，请联系支持。重复注册无法解决此问题。';
+      '本机已有这个 Handle 的身份材料（例如刚导入的身份备份），但它还不能直接登录。请使用下方操作。';
+
+  @override
+  String get registrationLocalStateNeutralHint =>
+      '本机已有这个 Handle 的身份材料（例如此前导入的身份备份）。继续注册不会创建新身份；请先恢复已有身份。';
 
   @override
   String get registrationContinuityChanged => '身份连续性状态已变化。请重新发送验证码后再试。';
@@ -1155,6 +1159,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceJoinEntrySubtitle => '需要已有管理设备确认两端的 6 位验证码';
 
   @override
+  String get deviceJoinRestoreIdentityHint =>
+      '加入后仍是同一个身份，DID 不会改变。验证码只用于找到账号并请求已有设备批准本机，不会创建新身份。';
+
+  @override
   String get onboardingExistingHandleTitle => '这个 Handle 已经存在';
 
   @override
@@ -1463,7 +1471,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get identityBackupImportWarning =>
-      '导入会把该身份的根密钥和 DID 文档安装到本设备。消息、联系人和会话不会被恢复。同时持有文件和口令的人可以恢复此身份。';
+      '导入只安装该身份的根密钥和 DID 文档，不包含设备密钥，也不会恢复消息、联系人和会话。若本机已有该身份可用的设备凭证，导入后可以直接进入；否则需先从已授权设备加入本机或通过 Handle Recovery 才能登录。同时持有文件和口令的人可以恢复此身份。';
 
   @override
   String get identityBackupImportSelectFile => '选择备份文件';
@@ -3356,7 +3364,8 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get importSuccessSelectCredential => '导入成功，请选择该凭证登录';
+  String get importSuccessSelectCredential =>
+      '导入成功。该凭证只包含身份根凭据，需从已授权设备加入本机或通过 Handle Recovery 后才能登录。';
 
   @override
   String localCredentialsRefreshed(Object count) {
@@ -3851,6 +3860,113 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get legacyIdentityUpgradeFailed => '旧身份升级失败，请重试。';
+
+  @override
+  String get legacyIdentityBackupRequiresDeviceJoin =>
+      '身份备份只包含 DID 根凭据，不包含设备密钥，因此这台设备还不能登录该身份。';
+
+  @override
+  String get legacyIdentityBackupRequiresDeviceJoinHint =>
+      '请从已授权的设备将本机加入该身份，或通过 Handle Recovery 恢复访问后再登录。';
+
+  @override
+  String get localCredentialRootOnlyBadge => '仅根凭据 · 需授权本机';
+
+  @override
+  String get rootOnlyIdentityTitle => '这台设备还没有登录授权';
+
+  @override
+  String get rootOnlyIdentityMessage =>
+      '身份备份只包含 DID 根凭据，不包含本机设备密钥。Handle 和手机号已经属于这个身份，但服务器还不认识这台设备。可以把它加入该身份（需由已授权设备批准），或用 Handle Recovery 重新获得访问。';
+
+  @override
+  String get rootOnlyAuthorizeDeviceAction => '授权本机（设备加入）';
+
+  @override
+  String get rootOnlyHandleRecoveryAction => '用 Handle Recovery 恢复';
+
+  @override
+  String get rootOnlyRemoveLocalIdentityTitle => '本机导入的根凭据将被移除';
+
+  @override
+  String get rootOnlyRemoveLocalIdentityMessage =>
+      '设备加入会在关联请求提交成功后移除这份不能登录的根凭据，提交前退出不影响导入；Handle Recovery 会在进入恢复页前移除。移除只影响本机，你的身份备份文件不会被删除，之后仍可再次导入。';
+
+  @override
+  String get rootOnlyRemoveLocalIdentityConfirm => '继续';
+
+  @override
+  String get registrationLocalStateOpenLoginAction => '前往登录页';
+
+  @override
+  String get restoreIdentityTitle => '恢复身份';
+
+  @override
+  String get restoreIdentityDirectEntryMessage =>
+      '这台设备已有该身份的可用设备凭证，可以直接进入，不需要验证码。';
+
+  @override
+  String get restoreIdentityAuthorizationRequiredMessage =>
+      '备份安装了该身份的 DID 根凭据和根私钥，但不含设备密钥；本机还不是这个 DID 的授权设备。为本机新增设备记录时 DID 保持不变，需要由该身份已登记的设备批准这次加入；服务器要求的短信验证码只用于找到账号并发出批准请求。';
+
+  @override
+  String get restoreIdentityCredentialMissingMessage =>
+      '本机已没有这个 DID 的身份材料。设备加入请求提交成功后，导入的根凭据才会被移除；备份文件不受影响，如果加入没有完成，重新导入同一备份即可继续。';
+
+  @override
+  String get restoreIdentityDirectEnterAction => '直接进入';
+
+  @override
+  String get restoreIdentityRecoveryAction => '改用 Handle Recovery';
+
+  @override
+  String get restoreIdentityRecoveryNote =>
+      '仅在无法用已有设备批准时使用。Handle Recovery 会更换这个身份的 DID，恢复后的身份与备份中的 DID 不同。';
+
+  @override
+  String get restoreIdentityImportAnotherAction => '重新导入备份';
+
+  @override
+  String get restoreIdentityRebindRequiredMessage =>
+      '备份安装了该身份的 DID 根凭据和根私钥。这台设备可以直接绑定到这个 DID：由导入的根私钥签名为 DID 文档新增本机设备密钥，DID、Handle 和根私钥都不变，也不需要其他设备或短信验证码。';
+
+  @override
+  String get restoreIdentityRebindAction => '把本机绑定到这个 DID';
+
+  @override
+  String get restoreIdentityRebindNote =>
+      '这会用本机新的设备密钥替换 DID 文档中现有的设备条目。DID 和 Handle 不变。';
+
+  @override
+  String get restoreIdentityRebindConfirmTitle => '把本机绑定到导入的 DID？';
+
+  @override
+  String get restoreIdentityRebindConfirmMessage =>
+      '导入的根私钥将签发更新后的 DID 文档。DID 和 Handle 保持不变，本机成为已登录设备。DID 文档中当前列出的设备会被替换，那些设备需要重新加入才能继续使用这个身份。';
+
+  @override
+  String get restoreIdentityRebindConfirmAction => '绑定本机';
+
+  @override
+  String get restoreIdentityRebindPresenceReason => '确认把本机绑定到导入的身份。';
+
+  @override
+  String get deviceRebindUnsupported => '当前构建或服务器不支持绑定本机。';
+
+  @override
+  String get deviceRebindUserPresenceDenied => '身份验证已取消，DID 文档没有被修改。';
+
+  @override
+  String get deviceRebindConflict => 'DID 文档已在别处变更，无法从这台设备安全替换。';
+
+  @override
+  String get deviceRebindStateChanged => '登录身份或租户已变化，绑定已取消。';
+
+  @override
+  String get deviceRebindFailed => '无法更新 DID 文档来绑定本机。';
+
+  @override
+  String get deviceRebindSucceeded => '本机已绑定到导入的身份，可以直接进入。';
 
   @override
   String get localCredentialDeleteRecoveryHint => '同时会清除本机尚未完成的恢复进度。';

@@ -22,6 +22,7 @@ import '../application/config/awiki_environment_config.dart';
 import '../application/conversation_service.dart';
 import '../application/directory_application_service.dart';
 import '../application/device_management_service.dart';
+import '../application/device_rebind_service.dart';
 import '../application/group_application_service.dart';
 import '../application/identity_export_service.dart';
 import '../application/identity_backup_import_service.dart';
@@ -34,6 +35,7 @@ import '../application/ports/agent_inventory_port.dart';
 import '../application/ports/agent_availability_port.dart';
 import '../application/ports/account_state_sync_port.dart';
 import '../application/ports/device_management_core_port.dart';
+import '../application/ports/device_rebind_port.dart';
 import '../application/ports/group_encryption_core_port.dart';
 import '../application/ports/identity_core_port.dart';
 import '../application/ports/identity_export_port.dart';
@@ -139,6 +141,11 @@ final multiDeviceDeviceRevokeEnabledProvider = Provider<bool>(
       ref.watch(awikiEnvironmentConfigProvider).multiDeviceDeviceRevokeEnabled,
 );
 
+final multiDeviceDeviceRebindEnabledProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(awikiEnvironmentConfigProvider).multiDeviceDeviceRebindEnabled,
+);
+
 final multiDeviceDirectE2eeEnabledProvider = Provider<bool>(
   (ref) =>
       ref.watch(awikiEnvironmentConfigProvider).multiDeviceDirectE2eeEnabled,
@@ -192,6 +199,17 @@ final identityBackupImportServiceProvider =
         userPresence: ref.watch(userPresencePortProvider),
       ),
     );
+
+final deviceRebindPortProvider = Provider<DeviceRebindPort>(
+  (ref) => const UnsupportedDeviceRebindPort(),
+);
+
+final deviceRebindServiceProvider = Provider<DeviceRebindService>(
+  (ref) => DeviceRebindService(
+    rebind: ref.watch(deviceRebindPortProvider),
+    userPresence: ref.watch(userPresencePortProvider),
+  ),
+);
 
 final deviceManagementServiceProvider = Provider<DeviceManagementService>(
   (ref) => DeviceManagementService(

@@ -35,8 +35,8 @@ Harness：—
     `identity_backup_import_port.dart`、`identity_backup_import_service.dart`、
     `awiki_im_core_identity_backup_import_adapter.dart`、
     `identity_backup_import_dialog.dart`；
-  - 入口在设置 → 安全（三套响应式布局共用），**未新增 onboarding 入口**，
-    符合 CLAUDE.md 的统一登录/注册约束；
+  - 入口在设置 → 安全（三套响应式布局共用）；统一登录/注册页也提供同一入口
+    （仅 Core 支持时展示），未登录时可按 tenant 围栏直接导入，用于换机/首装恢复；
   - 文件选择复用现有 `AttachmentPickerService.pickAttachment`，没有新增
     `openFile` channel 或 `file_selector` 依赖；
   - `app_runtime_provider.dart` 的 `importCredentialArchive()` 占位已替换为
@@ -47,8 +47,44 @@ Harness：—
     `alreadyPresent` 且导入的是当前身份时保留会话，否则退出当前会话、重新读取
     本地凭证并回到统一登录，用户按普通登录流程选择新凭证（提示
     `importSuccessSelectCredential`）。
-  - §4.4 的“导入后如何登录”问题按上述方式落地：备份不含 JWT，导入后仍走正常
-    登录/激活流程；本轮不验证 root 私钥直接换 JWT。
+  - §4.4 的“导入后如何登录”已按协议事实收敛：备份不含 JWT，导入凭证是
+    `root_only`，没有设备签名/E2EE 密钥，也没有服务端设备记录；ANP 不能为既有
+    DID 追加设备密钥，备份也不携带设备密钥，所以 root 私钥不能换 JWT。Core 对
+    这类身份的 `legacy_upgrade_status` / `upgrade_legacy_identity` 返回
+    `retry_required` + `root_only_requires_device_join`，App 不进入旧身份升级，
+    会话只能由真实设备 Join 或 Handle Recovery 建立。
+- root-only 授权流修正（2026-11-15 追加，App only）：
+  - 原实现只显示一段说明 + 返回，属于死路；用户无法从导入结果继续。现改为
+    可续接的授权流：
+    - `AwikiImCoreIdentityAdapter.listLocalIdentities()` 用
+      `identityDeviceSummary(IdIdentitySelector(id)).readiness` 标记
+      `SessionIdentity.rootOnly`（readiness 查询失败时 fail-soft 按普通凭证），
+      mapper 透传到 `AppSession` / `LegacySessionIdentity`；
+    - 本地身份卡展示“仅根凭据 · 需授权本机”标记，点按打开“这台设备还没有登录
+      授权”说明，而不是发起登录；
+    - 说明提供“授权本机（设备加入）”和“用 Handle Recovery 恢复”（仅服务端声明
+      支持 phone OTP 恢复时）两个入口；两者都先展示“本机导入的根凭据将被移除”
+      的确认（只删本地条目，备份文件保留，因为 Core 在 root-only 条目存在时拒绝
+      Join/Recovery 激活）。设备 Join 在加入请求提交成功后、任何批准被消费前
+      `deleteLocalCredential`，提交前退出不影响导入；删除失败立即取消该 Join。
+      Handle Recovery 在进入恢复页前删除；
+    - 旧身份升级冲突投影同样提供授权/恢复/返回三个动作；
+    - 注册冲突错误文案不再指向不存在的“登录”页，而是在本机 root-only 条目存在时
+      直接内嵌“授权本机（设备加入）”/“用 Handle Recovery 恢复”动作（移除确认后
+      进入对应页面）；无条目时保留“前往登录页”兜底。导入成功后登录/注册页自动
+      切到“登录”面板，让导入凭证立即可见；
+    - 登录/注册表单中输入与本地 root-only 条目相同的 Handle 时，无需提交即可看到
+      上述两个动作；`IdentityMethodPicker` 只在对应 DID 方法已不可新建时展示
+      Core 的未完成注册入口，本地已有同一 Handle 身份材料时同样隐藏（Core 的
+      resumable record 保留，只隐藏无法继续的重试入口）。
+  - 测试：`tests/unit/onboarding_page_test.dart`（标记、授权弹窗、删除确认与
+    Join/Recovery 预填、冲突提示内嵌授权/恢复入口、输入 Handle 即展示授权/恢复）、
+    `tests/unit/identity_web_product_test.dart`（方法可用时隐藏未完成注册入口、
+    本地已有身份材料时隐藏同一 Handle 的未完成注册入口）、
+    `tests/unit/data/im_core/awiki_im_core_identity_adapter_test.dart`
+    （readiness 标记与失败 fail-soft）、
+    `tests/unit/data/im_core/awiki_im_core_mappers_test.dart`（rootOnly 透传）、
+    `tests/unit/devices/devices_ui_test.dart`（Join 页预填）。
 - 未完成：
   - §4.5 的 `identity-backup-import` E2E 未实现，`docs/test-case-catalog.md` 未改；
     当前覆盖为 Rust + App unit/adapter/widget。
@@ -162,9 +198,22 @@ Harness：—
 5. 收尾：删除或改造 `app_runtime_provider.dart:984` 的 `importCredentialArchive()` 占位（确认无调用方后删除）。
 6. Storage Scope：导入产生新 identity，必须落新/隔离 scope，遵守 CLAUDE.md 的 tenant/state/vault 归属约束；不得改写现有 owner 数据（已有身份覆盖时先提示并走认证）。
 
-### 4.4 导入后的登录路径（开放问题，见 §6）
+### 4.4 导入后的登录路径（已结论）
 
-ANP root 私钥能否直接换取 JWT（identity activation / auth token）尚未确认。若不能，导入完成后仍需依赖现有 Handle Recovery/Join 流程，UI 文案必须如实说明“导入只安装身份材料”。
+结论：ANP root 私钥不能换取 JWT，导入凭证不能直接登录。依据：
+
+- `AnpIdentitySigner` 的认证签名只用设备密钥（DeviceAssertion / Authentication），
+  root key 不在认证密钥集合内，`sign_root` 也不是可用的登录签名；
+- ANP 不能为既有 DID 追加设备密钥（enrollment/import 对已存在 DID 返回
+  `DuplicateIdentity`），v1 备份同样只含 root 材料；
+- 服务端没有本机的设备记录，DID-WBA 只接受已授权设备的签名。
+
+因此导入只安装身份材料，`legacy_upgrade_status` 与 `upgrade_legacy_identity`
+对该身份返回 `retry_required` + `root_only_requires_device_join`，App 不做升级、
+不建会话，UI 提供设备 Join 或 Handle Recovery 两个真实续接入口（Join 在加入
+请求提交成功后移除本机 root-only 条目，Recovery 在进入恢复页前移除，备份文件
+保留）。root 材料的受支持用途是 root 托管与既有管理权
+转移流程，二者都不由身份备份导入触发。
 
 ### 4.5 测试
 
@@ -182,7 +231,11 @@ ANP root 私钥能否直接换取 JWT（identity activation / auth token）尚�
 
 ## 6. 风险与开放问题
 
-- **导入后如何登录**：ANP root 私钥 → JWT 的路径未知；直接影响特性 A 的完成形态与文案（见 4.4）。
+- **导入后如何登录**（已解决，见 4.4）：ANP root 私钥不能换 JWT；`root_only`
+  身份由 Core 返回 `root_only_requires_device_join`，App 展示授权说明并提供设备
+  Join / Handle Recovery 续接，不进入旧身份升级重试。剩余产品缺口：导入的 root
+  目前不能直接附加到后续 Join 出来的成员设备上，需要独立设计后才可承诺“恢复后
+  即可管理该身份”。
 - **`anp_identity_store_id` 冲突策略**：目标机已存在同名 store 时，覆盖还是拒绝，需要 Core 明确并 fail closed。
 - **vault custody**：V1 直接拒绝导入，文案需要解释。
 - **文件选择器实现**：新增 channel vs `file_selector` 插件（§4.3.3）。

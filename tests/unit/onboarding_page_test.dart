@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:awiki_im_core/awiki_im_core.dart' as core;
 import 'package:awiki_me/src/domain/entities/session_identity.dart';
@@ -13,6 +14,7 @@ import 'package:awiki_me/src/application/onboarding_service.dart';
 import 'package:awiki_me/src/application/onboarding_support_service.dart';
 import 'package:awiki_me/src/application/ports/identity_core_port.dart';
 import 'package:awiki_me/src/application/ports/handle_recovery_core_port.dart';
+import 'package:awiki_me/src/application/ports/identity_backup_import_port.dart';
 import 'package:awiki_me/src/application/ports/legacy_identity_upgrade_port.dart';
 import 'package:awiki_me/src/application/ports/user_presence_port.dart';
 import 'package:awiki_me/src/application/tenant/app_tenant.dart';
@@ -26,6 +28,7 @@ import 'package:awiki_me/src/presentation/devices/device_join_page.dart';
 import 'package:awiki_me/src/presentation/devices/devices_provider.dart';
 import 'package:awiki_me/src/presentation/onboarding/onboarding_page.dart';
 import 'package:awiki_me/src/presentation/onboarding/onboarding_provider.dart';
+import 'package:awiki_me/src/presentation/onboarding/restore_identity_provider.dart';
 import 'package:awiki_me/src/presentation/recovery/handle_recovery_page.dart';
 import 'package:awiki_me/src/presentation/recovery/handle_recovery_provider.dart';
 import 'package:awiki_me/src/presentation/shared/awiki_me_feedback.dart';
@@ -228,6 +231,65 @@ void main() {
     expect(find.text('将此设备加入已有账户'), findsNothing);
   });
 
+  testWidgets('macOS 登录页提供身份备份导入入口并可打开导入对话框', (tester) async {
+    addTearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+      _resetTestViewSize(tester);
+    });
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    _setTestViewSize(tester, const Size(1440, 900));
+
+    await tester.pumpWidget(
+      buildLocalizedTestApp(
+        home: const OnboardingPage(),
+        providerOverrides: <Override>[
+          identityBackupImportPortProvider.overrideWithValue(
+            _SupportedIdentityBackupImportPort(),
+          ),
+        ],
+      ),
+    );
+    await _settleVerificationStep(tester);
+
+    final entry = find.byKey(const Key('onboarding-restore-identity-entry'));
+    expect(entry, findsOneWidget);
+    expect(find.text('恢复身份'), findsOneWidget);
+
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('identity-backup-import-pick-file')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('identity-backup-import-passphrase-field')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('登录页在 Core 不支持身份备份导入时不展示导入入口', (tester) async {
+    addTearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+      _resetTestViewSize(tester);
+    });
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    _setTestViewSize(tester, const Size(1440, 900));
+
+    await tester.pumpWidget(
+      buildLocalizedTestApp(home: const OnboardingPage()),
+    );
+    await _settleVerificationStep(tester);
+
+    expect(
+      find.byKey(const Key('onboarding-restore-identity-entry')),
+      findsNothing,
+    );
+  });
+
   testWidgets(
     'Legacy upgrade blocks login, shows loading, and retries the same identity id',
     (tester) async {
@@ -312,6 +374,413 @@ void main() {
       expect(gateway.lastLoginCredentialName, 'identity-123');
     },
   );
+
+  testWidgets(
+    'Root-only imported identity explains that a device Join is required',
+    (tester) async {
+      const localIdentity = SessionIdentity(
+        did: 'did:wba:awiki.ai:alice:e1_root_only',
+        localIdentityId: 'identity-123',
+        credentialName: 'imported-root',
+        displayName: 'Alice',
+        handle: 'alice.awiki.ai',
+      );
+      final gateway = FakeAwikiGateway()
+        ..localCredentials = const <SessionIdentity>[localIdentity]
+        ..loginResult = localIdentity;
+      final onboarding = _LegacyUpgradeOnboardingService(
+        Completer<LegacyIdentityUpgradeStatus>(),
+      )..statusResult = const LegacyIdentityUpgradeStatus.retryRequired(
+        identityId: 'identity-123',
+        failureCode: rootOnlyRequiresDeviceJoinCode,
+      );
+
+      await tester.pumpWidget(
+        buildLocalizedTestApp(
+          home: const OnboardingPage(),
+          gateway: gateway,
+          providerOverrides: <Override>[
+            onboardingServiceProvider.overrideWithValue(onboarding),
+          ],
+        ),
+      );
+      await _settleVerificationStep(tester);
+
+      await tester.tap(find.byKey(const Key('onboarding-identity-entry')));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Alice'));
+      await _settleVerificationStep(tester);
+      await _tapVisible(tester, find.text('Alice'));
+      await tester.pumpAndSettle();
+
+      expect(onboarding.upgradeSelectors, isEmpty);
+      expect(gateway.loginCalls, 0);
+      expect(
+        find.byKey(const Key('legacy-upgrade-device-join-message')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('legacy-upgrade-device-join-hint')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('legacy-upgrade-retry-message')),
+        findsNothing,
+      );
+      expect(
+        find.text('Diagnostic code: root_only_requires_device_join'),
+        findsOneWidget,
+      );
+      expect(find.text('重试'), findsNothing);
+      expect(find.text('授权本机（设备加入）'), findsOneWidget);
+      expect(find.text('用 Handle Recovery 恢复'), findsOneWidget);
+
+      await _tapVisible(tester, find.text('返回'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('legacy-upgrade-device-join-message')),
+        findsNothing,
+      );
+      expect(gateway.loginCalls, 0);
+
+      // Re-entering the same identity offers the real continuations instead of
+      // leaving the user on the old 返回-only dead end.
+      await _tapVisible(tester, find.text('Alice'));
+      await tester.pumpAndSettle();
+      await _tapVisible(tester, find.text('授权本机（设备加入）'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('legacy-upgrade-device-join-message')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('restore-identity-remove-local-identity-confirm')),
+        findsOneWidget,
+      );
+      expect(gateway.deleteLocalCredentialCalls, 0);
+
+      await tester.tap(
+        find.byKey(const Key('restore-identity-remove-local-identity-cancel')),
+      );
+      await tester.pumpAndSettle();
+      expect(gateway.deleteLocalCredentialCalls, 0);
+      expect(gateway.loginCalls, 0);
+    },
+  );
+
+  testWidgets('根凭据身份卡展示标记并引导设备授权而不是直接登录', (tester) async {
+    addTearDown(() => _resetTestViewSize(tester));
+    _setTestViewSize(tester, const Size(390, 844));
+    const localIdentity = SessionIdentity(
+      did: 'did:wba:awiki.me:users:alice:e1_root_only',
+      localIdentityId: 'identity-root',
+      credentialName: 'imported-root',
+      displayName: 'Alice',
+      handle: 'alice.awiki.me',
+      rootOnly: true,
+    );
+    final gateway = FakeAwikiGateway()
+      ..localCredentials = const <SessionIdentity>[localIdentity];
+
+    await tester.pumpWidget(
+      buildLocalizedTestApp(home: const OnboardingPage(), gateway: gateway),
+    );
+    await _settleVerificationStep(tester);
+
+    await tester.tap(find.byKey(const Key('onboarding-identity-entry')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('onboarding-local-credential-root-only:imported-root')),
+      findsOneWidget,
+    );
+    expect(find.text('仅根凭据 · 需授权本机'), findsOneWidget);
+
+    await _tapVisible(
+      tester,
+      find.byKey(const Key('onboarding-local-credential-select:imported-root')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(gateway.loginCalls, 0);
+    expect(find.byKey(const Key('restore-identity-panel')), findsOneWidget);
+    expect(
+      find.byKey(const Key('restore-identity-direct-enter')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('restore-identity-join-action')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('restore-identity-recovery-action')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('restore-identity-back')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('restore-identity-panel')), findsNothing);
+    expect(gateway.loginCalls, 0);
+    expect(gateway.deleteLocalCredentialCalls, 0);
+  });
+
+  testWidgets('根凭据授权设备加入会预填 Join 页面且开始前不移除本机根凭据', (tester) async {
+    addTearDown(() => _resetTestViewSize(tester));
+    _setTestViewSize(tester, const Size(390, 844));
+    const localIdentity = SessionIdentity(
+      did: 'did:wba:awiki.me:users:alice:e1_root_only',
+      localIdentityId: 'identity-root',
+      credentialName: 'imported-root',
+      displayName: 'Alice',
+      handle: 'alice.awiki.me',
+      rootOnly: true,
+    );
+    final gateway = FakeAwikiGateway()
+      ..localCredentials = const <SessionIdentity>[localIdentity];
+
+    await tester.pumpWidget(
+      buildLocalizedTestApp(home: const OnboardingPage(), gateway: gateway),
+    );
+    await _settleVerificationStep(tester);
+
+    await tester.tap(find.byKey(const Key('onboarding-identity-entry')));
+    await tester.pumpAndSettle();
+    await _tapVisible(
+      tester,
+      find.byKey(const Key('onboarding-local-credential-select:imported-root')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('restore-identity-join-action')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('本机导入的根凭据将被移除'), findsOneWidget);
+    expect(gateway.deleteLocalCredentialCalls, 0);
+
+    await tester.tap(
+      find.byKey(const Key('restore-identity-remove-local-identity-confirm')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(gateway.deleteLocalCredentialCalls, 0);
+    expect(gateway.loginCalls, 0);
+    expect(find.byType(DeviceJoinPage), findsOneWidget);
+    expect(
+      find.byKey(const Key('device-join-restore-identity-hint')),
+      findsOneWidget,
+    );
+    final fields = find.byType(CupertinoTextField);
+    expect(
+      tester.widget<CupertinoTextField>(fields.at(1)).controller!.text,
+      'alice.awiki.me',
+    );
+
+    Navigator.of(tester.element(find.byType(DeviceJoinPage))).pop();
+    await tester.pumpAndSettle();
+
+    // Leaving before a join request exists keeps the import usable.
+    expect(gateway.deleteLocalCredentialCalls, 0);
+    expect(find.byKey(const Key('restore-identity-panel')), findsOneWidget);
+  });
+
+  testWidgets('根凭据授权 Handle Recovery 会预填恢复目标 Handle', (tester) async {
+    addTearDown(() => _resetTestViewSize(tester));
+    _setTestViewSize(tester, const Size(390, 844));
+    const localIdentity = SessionIdentity(
+      did: 'did:wba:awiki.me:users:alice:e1_root_only',
+      localIdentityId: 'identity-root',
+      credentialName: 'imported-root',
+      displayName: 'Alice',
+      handle: 'alice.awiki.me',
+      rootOnly: true,
+    );
+    final gateway = FakeAwikiGateway()
+      ..localCredentials = const <SessionIdentity>[localIdentity];
+
+    await tester.pumpWidget(
+      buildLocalizedTestApp(home: const OnboardingPage(), gateway: gateway),
+    );
+    await _settleVerificationStep(tester);
+
+    await tester.tap(find.byKey(const Key('onboarding-identity-entry')));
+    await tester.pumpAndSettle();
+    await _tapVisible(
+      tester,
+      find.byKey(const Key('onboarding-local-credential-select:imported-root')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('restore-identity-recovery-action')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('restore-identity-remove-local-identity-confirm')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(gateway.deleteLocalCredentialCalls, 1);
+    expect(gateway.lastDeletedLocalCredentialSelector, 'identity-root');
+    expect(find.byKey(const Key('handle-recovery-page')), findsOneWidget);
+    expect(find.text('alice.awiki.me'), findsWidgets);
+  });
+
+  testWidgets('恢复面板：已有可用设备凭证时直接进入且不发送验证码', (tester) async {
+    addTearDown(() => _resetTestViewSize(tester));
+    _setTestViewSize(tester, const Size(390, 844));
+    const credential = SessionIdentity(
+      did: 'did:wba:awiki.me:users:alice:e1_restored',
+      localIdentityId: 'identity-restored',
+      credentialName: 'restored-device',
+      displayName: 'Alice',
+      handle: 'alice.awiki.me',
+    );
+    final gateway = FakeAwikiGateway()
+      ..localCredentials = const <SessionIdentity>[credential]
+      ..loginResult = credential;
+
+    await tester.pumpWidget(
+      buildLocalizedTestApp(home: const OnboardingPage(), gateway: gateway),
+    );
+    await _settleVerificationStep(tester);
+    await tester.tap(find.byKey(const Key('onboarding-identity-entry')));
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingPage)),
+    );
+    container.read(restoreIdentityProvider.notifier).begin(
+      const RestoreIdentityIntent(
+        identityId: 'identity-restored',
+        did: 'did:wba:awiki.me:users:alice:e1_restored',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('restore-identity-panel')), findsOneWidget);
+    expect(
+      find.byKey(const Key('restore-identity-join-action')),
+      findsNothing,
+    );
+
+    await _tapVisible(
+      tester,
+      find.byKey(const Key('restore-identity-direct-enter')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(gateway.loginCalls, 1);
+    expect(gateway.lastLoginCredentialName, 'restored-device');
+    expect(gateway.sendOtpCalls, 0);
+    expect(container.read(restoreIdentityProvider), isNull);
+  });
+
+  testWidgets('恢复面板：凭证缺失时只提供重新导入', (tester) async {
+    addTearDown(() => _resetTestViewSize(tester));
+    _setTestViewSize(tester, const Size(390, 844));
+
+    await tester.pumpWidget(
+      buildLocalizedTestApp(
+        home: const OnboardingPage(),
+        providerOverrides: <Override>[
+          identityBackupImportPortProvider.overrideWithValue(
+            _SupportedIdentityBackupImportPort(),
+          ),
+        ],
+      ),
+    );
+    await _settleVerificationStep(tester);
+    await tester.tap(find.byKey(const Key('onboarding-identity-entry')));
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingPage)),
+    );
+    container.read(restoreIdentityProvider.notifier).begin(
+      const RestoreIdentityIntent(
+        identityId: 'identity-missing',
+        did: 'did:wba:awiki.me:users:alice:e1_missing',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('restore-identity-panel')), findsOneWidget);
+    expect(
+      find.byKey(const Key('restore-identity-direct-enter')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('restore-identity-join-action')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('restore-identity-refresh')), findsNothing);
+    expect(
+      find.byKey(const Key('restore-identity-import-another')),
+      findsOneWidget,
+    );
+
+    await _tapVisible(
+      tester,
+      find.byKey(const Key('restore-identity-import-another')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('identity-backup-import-pick-file')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('恢复面板：服务端未声明恢复能力时不展示 Handle Recovery', (tester) async {
+    addTearDown(() => _resetTestViewSize(tester));
+    _setTestViewSize(tester, const Size(390, 844));
+    const localIdentity = SessionIdentity(
+      did: 'did:wba:awiki.me:users:alice:e1_root_only',
+      localIdentityId: 'identity-root',
+      credentialName: 'imported-root',
+      displayName: 'Alice',
+      handle: 'alice.awiki.me',
+      rootOnly: true,
+    );
+    final defaultInfo = OnboardingServerInfo.userServiceDefault();
+    final gateway = FakeAwikiGateway()
+      ..localCredentials = const <SessionIdentity>[localIdentity]
+      ..serverInfo = OnboardingServerInfo(
+        schemaVersion: defaultInfo.schemaVersion,
+        service: defaultInfo.service,
+        identity: OnboardingIdentityCapabilities(
+          handleRegistration: defaultInfo.identity.handleRegistration,
+        ),
+      );
+
+    await tester.pumpWidget(
+      buildLocalizedTestApp(home: const OnboardingPage(), gateway: gateway),
+    );
+    await _settleVerificationStep(tester);
+    await tester.tap(find.byKey(const Key('onboarding-identity-entry')));
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingPage)),
+    );
+    container
+        .read(restoreIdentityProvider.notifier)
+        .beginForCredential(localIdentity);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('restore-identity-panel')), findsOneWidget);
+    expect(
+      find.byKey(const Key('restore-identity-join-action')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('restore-identity-recovery-action')),
+      findsNothing,
+    );
+    expect(gateway.loginCalls, 0);
+  });
 
   testWidgets('macOS 桌面登录页使用新稿左右分栏和单层认证入口', (tester) async {
     final gateway = FakeAwikiGateway()
@@ -2466,10 +2935,146 @@ void main() {
           find.byKey(const Key('registration-local-state-guidance')),
           findsOneWidget,
         );
+        final openLogin = find.byKey(
+          const Key('registration-local-state-open-login'),
+        );
+        expect(openLogin, findsOneWidget);
+        await tester.ensureVisible(openLogin);
+        await tester.pumpAndSettle();
+        await tester.tap(openLogin);
+        await tester.pumpAndSettle();
+        expect(container.read(onboardingProvider).entryMode, 'login');
       }
       expect(gateway.onboardingPhoneRegistrationCalls, 1);
     });
   }
+
+  testWidgets('注册冲突提示内提供唯一的恢复身份入口并打开恢复面板', (tester) async {
+    addTearDown(() => _resetTestViewSize(tester));
+    _setTestViewSize(tester, const Size(390, 844));
+    const localIdentity = SessionIdentity(
+      did: 'did:wba:awiki.me:users:alice:e1_root_only',
+      localIdentityId: 'identity-root',
+      credentialName: 'imported-root',
+      displayName: 'Alice',
+      handle: 'alice.awiki.me',
+      rootOnly: true,
+    );
+    final gateway = FakeAwikiGateway()
+      ..localCredentials = const <SessionIdentity>[localIdentity]
+      ..nextOnboardingPhoneRegistrationError = AppStructuredError(
+        code: 'identity.local_registry_conflict',
+        cause: core.AwikiImCoreException(
+          code: 'service_error',
+          message: 'unstable native diagnostic',
+          serviceCode: 'identity.local_registry_conflict',
+        ),
+      );
+
+    await tester.pumpWidget(
+      buildLocalizedTestApp(home: const OnboardingPage(), gateway: gateway),
+    );
+    await _settleVerificationStep(tester);
+
+    final fields = find.byType(CupertinoTextField);
+    await tester.enterText(fields.at(0), '13800138000');
+    await tester.enterText(fields.at(1), 'alice');
+    await tester.enterText(fields.at(2), '123456');
+    await _tapVisible(tester, find.text('发送验证码'));
+    await tester.pump();
+    await _tapVisible(tester, find.text('登录/注册'));
+    await _settleVerificationStep(tester);
+
+    expect(
+      find.byKey(const Key('registration-local-state-guidance')),
+      findsOneWidget,
+    );
+    final restore = find.byKey(
+      const Key('registration-local-state-restore-identity'),
+    );
+    expect(restore, findsOneWidget);
+    expect(
+      find.byKey(const Key('registration-local-state-open-login')),
+      findsNothing,
+    );
+
+    await tester.ensureVisible(restore);
+    await tester.pumpAndSettle();
+    await tester.tap(restore);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('restore-identity-panel')), findsOneWidget);
+    final recover = find.byKey(const Key('restore-identity-recovery-action'));
+    expect(recover, findsOneWidget);
+    await tester.tap(recover);
+    await tester.pumpAndSettle();
+
+    expect(find.text('本机导入的根凭据将被移除'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('restore-identity-remove-local-identity-confirm')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(gateway.deleteLocalCredentialCalls, 1);
+    expect(gateway.lastDeletedLocalCredentialSelector, 'identity-root');
+    expect(find.byKey(const Key('handle-recovery-page')), findsOneWidget);
+    expect(find.text('alice.awiki.me'), findsWidgets);
+  });
+
+  testWidgets('输入已有根凭据的 Handle 时展示中性提示与恢复身份入口', (tester) async {
+    addTearDown(() => _resetTestViewSize(tester));
+    _setTestViewSize(tester, const Size(390, 844));
+    const localIdentity = SessionIdentity(
+      did: 'did:wba:awiki.me:users:alice:e1_root_only',
+      localIdentityId: 'identity-root',
+      credentialName: 'imported-root',
+      displayName: 'Alice',
+      handle: 'alice.awiki.me',
+      rootOnly: true,
+    );
+    final gateway = FakeAwikiGateway()
+      ..localCredentials = const <SessionIdentity>[localIdentity];
+
+    await tester.pumpWidget(
+      buildLocalizedTestApp(home: const OnboardingPage(), gateway: gateway),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('registration-local-state-guidance')),
+      findsNothing,
+    );
+
+    await tester.enterText(find.byType(CupertinoTextField).at(1), 'alice');
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('registration-local-state-guidance')),
+      findsOneWidget,
+    );
+    final restore = find.byKey(
+      const Key('registration-local-state-restore-identity'),
+    );
+    expect(restore, findsOneWidget);
+    expect(
+      find.byKey(const Key('registration-local-state-open-login')),
+      findsNothing,
+    );
+    expect(gateway.onboardingPhoneRegistrationCalls, 0);
+
+    await tester.ensureVisible(restore);
+    await tester.pumpAndSettle();
+    await tester.tap(restore);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('restore-identity-panel')), findsOneWidget);
+    expect(
+      find.byKey(const Key('restore-identity-join-action')),
+      findsOneWidget,
+    );
+    expect(gateway.onboardingPhoneRegistrationCalls, 0);
+    expect(gateway.loginCalls, 0);
+  });
 
   testWidgets('手机号注册在 provider 边界阻止并发重复提交', (tester) async {
     final pending = Completer<void>();
@@ -2813,13 +3418,15 @@ class _LegacyUpgradeOnboardingService implements OnboardingService {
   final Completer<LegacyIdentityUpgradeStatus> firstUpgrade;
   final List<String> statusSelectors = <String>[];
   final List<String> upgradeSelectors = <String>[];
+  LegacyIdentityUpgradeStatus statusResult =
+      const LegacyIdentityUpgradeStatus.idle();
 
   @override
   Future<LegacyIdentityUpgradeStatus> legacyUpgradeStatus(
     String identityIdOrAlias,
   ) async {
     statusSelectors.add(identityIdOrAlias);
-    return const LegacyIdentityUpgradeStatus.idle();
+    return statusResult;
   }
 
   @override
@@ -2986,6 +3593,37 @@ class _RecordingHandleRecoveryCorePort implements HandleRecoveryCorePort {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _SupportedIdentityBackupImportPort implements IdentityBackupImportPort {
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<IdentityBackupSummary> inspectIdentityBackup({
+    required Uint8List bytes,
+    required Uint8List passphrase,
+  }) async => const IdentityBackupSummary(
+    did: 'did:wba:awiki.info:users:alice',
+    displayName: 'Alice',
+    custody: 'anp_root',
+    exportedAt: '2026-11-15T00:00:00Z',
+    sourceCoreVersion: 'test',
+    keyKinds: <String>['root'],
+    hasDidDocument: true,
+  );
+
+  @override
+  Future<IdentityBackupImportOutcome> importIdentityBackup({
+    required Uint8List bytes,
+    required Uint8List passphrase,
+    required bool userPresenceConfirmed,
+  }) async => const IdentityBackupImportOutcome(
+    identityId: 'identity-alice',
+    did: 'did:wba:awiki.info:users:alice',
+    rootKeyId: 'did:wba:awiki.info:users:alice#root',
+    alreadyPresent: false,
+  );
 }
 
 Future<void> _tapVisible(WidgetTester tester, Finder finder) async {

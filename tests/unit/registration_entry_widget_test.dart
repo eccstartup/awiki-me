@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:awiki_me/src/app/app_services.dart';
 import 'package:awiki_me/src/application/onboarding_support_service.dart';
+import 'package:awiki_me/src/domain/entities/session_identity.dart';
 import 'package:awiki_me/src/presentation/onboarding/onboarding_page.dart';
 import 'package:awiki_me/src/presentation/onboarding/onboarding_provider.dart';
 import 'package:awiki_me/src/presentation/shared/awiki_me_design.dart';
@@ -885,6 +886,57 @@ void main() {
       );
       expect(gateway.sendOtpCalls, 1);
       expect(gateway.registerHandleCalls, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'root-only local credential shows a neutral restore hint and starts no registration',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      const localIdentity = SessionIdentity(
+        did: 'did:wba:awiki.me:users:alice:e1_root_only',
+        localIdentityId: 'identity-root',
+        credentialName: 'imported-root',
+        displayName: 'Alice',
+        handle: 'alice.awiki.me',
+        rootOnly: true,
+      );
+      final gateway = FakeAwikiGateway()
+        ..localCredentials = const <SessionIdentity>[localIdentity];
+      await tester.pumpWidget(
+        buildLocalizedTestApp(home: const OnboardingPage(), gateway: gateway),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(field('e2e-handle-input'), 'alice');
+      await tester.enterText(field('e2e-phone-input'), '13800138000');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('registration-local-state-guidance')),
+        findsOneWidget,
+      );
+      final restore = find.byKey(
+        const Key('registration-local-state-restore-identity'),
+      );
+      expect(restore, findsOneWidget);
+      expect(
+        find.byKey(const Key('registration-local-state-open-login')),
+        findsNothing,
+      );
+      expect(gateway.sendOtpCalls, 0);
+      expect(gateway.onboardingPhoneRegistrationCalls, 0);
+
+      await tapVisible(tester, restore);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('restore-identity-panel')), findsOneWidget);
+      expect(gateway.sendOtpCalls, 0);
+      expect(gateway.onboardingPhoneRegistrationCalls, 0);
       expect(tester.takeException(), isNull);
     },
   );

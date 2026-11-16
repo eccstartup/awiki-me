@@ -41,6 +41,7 @@ class AwikiImCoreRuntime implements ImCoreRuntimePort {
     required StorageScopeId scopeId,
     required AwikiImCoreVaultSecretProvider vaultSecretProvider,
     this.multiDeviceDeviceRevokeEnabled = true,
+    this.multiDeviceDeviceRebindEnabled = true,
     this.multiDeviceDirectE2eeEnabled = true,
     this.multiDeviceGroupE2eeEnabled = true,
     String? multiDeviceAudience,
@@ -64,6 +65,7 @@ class AwikiImCoreRuntime implements ImCoreRuntimePort {
   final StorageScopeId _scopeId;
   final AwikiImCoreVaultSecretProvider _vaultSecretProvider;
   final bool multiDeviceDeviceRevokeEnabled;
+  final bool multiDeviceDeviceRebindEnabled;
   final bool multiDeviceDirectE2eeEnabled;
   final bool multiDeviceGroupE2eeEnabled;
   final String multiDeviceAudience;
@@ -138,6 +140,7 @@ class AwikiImCoreRuntime implements ImCoreRuntimePort {
       paths: corePaths,
       openOptions: core.AwikiImCoreOpenOptions.vaultRequired(
         multiDeviceDeviceRevokeEnabled: multiDeviceDeviceRevokeEnabled,
+        multiDeviceDeviceRebindEnabled: multiDeviceDeviceRebindEnabled,
         multiDeviceDirectE2eeEnabled: multiDeviceDirectE2eeEnabled,
         multiDeviceGroupE2eeEnabled: multiDeviceGroupE2eeEnabled,
         multiDeviceHandleRecoveryEnabled: true,

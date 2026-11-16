@@ -469,6 +469,36 @@ void main() {
     });
 
     test(
+      'restoreSession skips the legacy upgrade for a root-only identity',
+      () async {
+        final identity = _session('id-root-only');
+        final runtime = _FakeRuntime();
+        final legacyUpgrades = _FakeLegacyUpgrades(
+          initialStatus: const LegacyIdentityUpgradeStatus.retryRequired(
+            identityId: 'id-root-only',
+            failureCode: rootOnlyRequiresDeviceJoinCode,
+          ),
+          upgradeStatus: const LegacyIdentityUpgradeStatus.completed(),
+        );
+        final service = ImCoreAppSessionService(
+          bootstrapEpochBarrier: const NoopAppBootstrapEpochBarrier(),
+          runtime: runtime,
+          identities: _FakeIdentities(defaultIdentity: identity),
+          auth: _FakeAuth(),
+          legacyUpgrades: legacyUpgrades,
+          activeSessionStore: _FakeActiveSessionStore(identity.identityId),
+        );
+
+        final restored = await service.restoreSession();
+
+        expect(restored, isNull);
+        expect(legacyUpgrades.statusSelectors, <String>[identity.identityId]);
+        expect(legacyUpgrades.upgradeSelectors, isEmpty);
+        expect(runtime.switchedIdentities, isEmpty);
+      },
+    );
+
+    test(
       'restoreSession keeps the local identity when auth is temporarily offline',
       () async {
         final runtime = _FakeRuntime();

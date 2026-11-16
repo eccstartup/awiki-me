@@ -269,6 +269,11 @@ class ImCoreAppSessionService
     if (status.phase == LegacyIdentityUpgradePhase.completed) {
       return true;
     }
+    if (status.requiresDeviceJoin) {
+      // Root-only imported identity: no local device keys exist, so the
+      // upgrade cannot make it login-ready.
+      return false;
+    }
     status = await legacyUpgrades.upgradeLegacyIdentity(identityId);
     return status.phase == LegacyIdentityUpgradePhase.completed;
   }

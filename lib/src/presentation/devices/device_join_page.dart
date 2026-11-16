@@ -26,17 +26,41 @@ import 'devices_provider.dart';
 import '../recovery/handle_recovery_provider.dart';
 
 class DeviceJoinPage extends ConsumerStatefulWidget {
-  const DeviceJoinPage({super.key, this.autoPoll = true});
+  const DeviceJoinPage({
+    super.key,
+    this.autoPoll = true,
+    this.initialHandle,
+    this.initialPhone,
+    this.restoreIdentity = false,
+    this.restoreIdentityDid,
+  });
 
   final bool autoPoll;
+
+  /// Prefills from a local identity or recovery target. The user may edit
+  /// both fields; nothing is submitted until they start the Join.
+  final String? initialHandle;
+  final String? initialPhone;
+
+  /// Entered from the restore-identity flow: the join keeps the backed-up DID
+  /// and the OTP only locates the account that approves this device.
+  final bool restoreIdentity;
+
+  /// Backed-up DID whose imported root-only entry must be gone before Core can
+  /// finalize this Join.
+  final String? restoreIdentityDid;
 
   @override
   ConsumerState<DeviceJoinPage> createState() => _DeviceJoinPageState();
 }
 
 class _DeviceJoinPageState extends ConsumerState<DeviceJoinPage> {
-  final _handleController = TextEditingController();
-  final _phoneController = TextEditingController();
+  late final _handleController = TextEditingController(
+    text: widget.initialHandle?.trim() ?? '',
+  );
+  late final _phoneController = TextEditingController(
+    text: widget.initialPhone?.trim() ?? '',
+  );
   final _otpController = TextEditingController();
   Timer? _pollTimer;
   bool _otpSendFailed = false;
@@ -54,6 +78,14 @@ class _DeviceJoinPageState extends ConsumerState<DeviceJoinPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await ref.read(devicesProvider.notifier).loadNewDevice();
+      if (!mounted) return;
+      final activeJoin = ref.read(devicesProvider).activeJoin;
+      if (widget.restoreIdentity &&
+          activeJoin != null &&
+          !activeJoin.isTerminal &&
+          !await _discardRestoredRootCredential()) {
+        return;
+      }
       if (!mounted) return;
       await _activateAuthorizedMember();
     });
@@ -166,6 +198,18 @@ class _DeviceJoinPageState extends ConsumerState<DeviceJoinPage> {
             context.l10n.deviceJoinEntrySubtitle,
             style: TextStyle(color: context.awikiTheme.secondaryText),
           ),
+          if (widget.restoreIdentity) ...<Widget>[
+            const SizedBox(height: 10),
+            Text(
+              context.l10n.deviceJoinRestoreIdentityHint,
+              key: const Key('device-join-restore-identity-hint'),
+              style: TextStyle(
+                color: context.awikiTheme.secondaryText,
+                fontSize: 12,
+                height: 1.5,
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           AppTextField(
             controller: _phoneController,
@@ -417,16 +461,36 @@ class _DeviceJoinPageState extends ConsumerState<DeviceJoinPage> {
   Future<void> _begin() async {
     final otp = _otpController.text;
     _otpController.clear();
-    await ref
+    final began = await ref
         .read(devicesProvider.notifier)
         .beginNewDeviceJoin(
           handle: _handleController.text,
           phone: _phoneController.text,
           otp: otp,
           presenceReason: context.l10n.handleRecoveryPresenceReason,
+          ignoreLocalRecoveryScope: widget.restoreIdentity,
         );
+    if (!mounted || !began) return;
+    if (!await _discardRestoredRootCredential()) return;
     if (!mounted) return;
     await _activateAuthorizedMember();
+  }
+
+  /// Core finalizes an approved Join during a poll, so the imported root-only
+  /// entry must be gone before the managing device can approve. Removing it
+  /// only after the join request exists keeps the backup usable when the user
+  /// backs out before starting one. Returns false when the flow must stop.
+  Future<bool> _discardRestoredRootCredential() async {
+    if (!widget.restoreIdentity) return true;
+    final did = widget.restoreIdentityDid?.trim() ?? '';
+    final removed =
+        did.isNotEmpty &&
+        await ref
+            .read(appRuntimeProvider.notifier)
+            .removeRestoredRootCredential(did: did);
+    if (removed) return true;
+    await ref.read(devicesProvider.notifier).cancelNewDeviceActive();
+    return false;
   }
 
   Future<void> _pollNow() => _pollAndActivate();
@@ -586,6 +650,20 @@ class _DeviceJoinNotice extends StatelessWidget {
   }
 }
 
-Future<void> openDeviceJoinPage(BuildContext context) {
-  return AppNavigator.push<void>(context, (_) => const DeviceJoinPage());
+Future<void> openDeviceJoinPage(
+  BuildContext context, {
+  String? initialHandle,
+  String? initialPhone,
+  bool restoreIdentity = false,
+  String? restoreIdentityDid,
+}) {
+  return AppNavigator.push<void>(
+    context,
+    (_) => DeviceJoinPage(
+      initialHandle: initialHandle,
+      initialPhone: initialPhone,
+      restoreIdentity: restoreIdentity,
+      restoreIdentityDid: restoreIdentityDid,
+    ),
+  );
 }

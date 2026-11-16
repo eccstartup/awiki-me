@@ -1,6 +1,7 @@
 import '../../identity_method_test_support.dart';
 import 'package:awiki_im_core/awiki_im_core.dart' as core;
 import 'package:awiki_me/src/application/ports/identity_core_port.dart';
+import 'package:awiki_me/src/application/ports/legacy_identity_upgrade_port.dart';
 import 'package:awiki_me/src/core/app_error_classifier.dart';
 import 'package:awiki_me/src/data/im_core/awiki_im_core_identity_adapter.dart';
 import 'package:awiki_me/src/domain/entities/device_management.dart';
@@ -75,6 +76,101 @@ void main() {
       );
     },
   );
+
+  test(
+    'root-only legacy status keeps its stable code and marks device join',
+    () async {
+      final native = _IdentityErrorCore()
+        ..legacyStatus = const core.LegacyUpgradeRetryRequired(
+          identityId: 'identity-alice',
+          code: 'root_only_requires_device_join',
+        );
+      final adapter = AwikiImCoreIdentityAdapter.withCoreInstance(
+        coreInstance: () async => native,
+      );
+
+      final status = await adapter.legacyUpgradeStatus('identity-alice');
+
+      expect(status.phase, LegacyIdentityUpgradePhase.retryRequired);
+      expect(status.failureCode, rootOnlyRequiresDeviceJoinCode);
+      expect(status.requiresDeviceJoin, isTrue);
+
+      native.legacyStatus = const core.LegacyUpgradeRetryRequired(
+        identityId: 'identity-alice',
+        code: 'untrusted_detail',
+      );
+      final sanitized = await adapter.legacyUpgradeStatus('identity-alice');
+
+      expect(sanitized.failureCode, 'legacy_upgrade_failed');
+      expect(sanitized.requiresDeviceJoin, isFalse);
+    },
+  );
+
+  test('listLocalIdentities marks root-only entries from device readiness', () async {
+    const rootOnly = core.IdentitySummary(
+      id: 'identity-root',
+      did: 'did:wba:awiki.info:user:alice:e1_root',
+      handle: 'alice.awiki.info',
+      localAlias: 'alice',
+      isDefault: true,
+      readyForAuth: true,
+      readyForMessaging: false,
+    );
+    const member = core.IdentitySummary(
+      id: 'identity-member',
+      did: 'did:wba:awiki.info:user:bob:e1_member',
+      handle: 'bob.awiki.info',
+      isDefault: false,
+      readyForAuth: true,
+      readyForMessaging: true,
+    );
+    final native = _IdentityErrorCore()
+      ..identities = const <core.IdentitySummary>[rootOnly, member]
+      ..deviceReadiness['identity-root'] = core.IdentityDeviceReadiness.rootOnly
+      ..deviceReadiness['identity-member'] =
+          core.IdentityDeviceReadiness.memberReady;
+    final adapter = AwikiImCoreIdentityAdapter.withCoreInstance(
+      coreInstance: () async => native,
+    );
+
+    final sessions = await adapter.listLocalIdentities();
+
+    expect(
+      sessions.map((session) => session.identityId),
+      <String>['identity-root', 'identity-member'],
+    );
+    expect(sessions.first.rootOnly, isTrue);
+    expect(sessions.last.rootOnly, isFalse);
+    expect(native.deviceSummarySelectors, hasLength(2));
+    for (final selector in native.deviceSummarySelectors) {
+      expect(selector, isA<core.IdIdentitySelector>());
+    }
+    expect(
+      (native.deviceSummarySelectors.first as core.IdIdentitySelector).id,
+      'identity-root',
+    );
+  });
+
+  test('listLocalIdentities keeps the login path when readiness fails', () async {
+    const identity = core.IdentitySummary(
+      id: 'identity-alice',
+      did: 'did:wba:awiki.info:user:alice:e1_imported',
+      handle: 'alice.awiki.info',
+      isDefault: true,
+      readyForAuth: true,
+      readyForMessaging: true,
+    );
+    final native = _IdentityErrorCore()
+      ..identities = const <core.IdentitySummary>[identity]
+      ..deviceSummaryError = StateError('device registry unavailable');
+    final adapter = AwikiImCoreIdentityAdapter.withCoreInstance(
+      coreInstance: () async => native,
+    );
+
+    final sessions = await adapter.listLocalIdentities();
+
+    expect(sessions.single.rootOnly, isFalse);
+  });
 
   test('dotless local alias falls back after identity id lookup', () {
     final selectors = identitySelectorCandidates('cgw-038');
@@ -383,6 +479,37 @@ class _IdentityErrorCore implements core.AwikiImCore {
   Object? joinError;
   Object? upgradeError;
   Object? deletionError;
+  core.LegacyUpgradeStatus legacyStatus = const core.LegacyUpgradeIdle();
+
+  List<core.IdentitySummary> identities = const <core.IdentitySummary>[];
+  final Map<String, core.IdentityDeviceReadiness> deviceReadiness =
+      <String, core.IdentityDeviceReadiness>{};
+  final deviceSummarySelectors = <core.IdentitySelector>[];
+  Object? deviceSummaryError;
+
+  @override
+  Future<List<core.IdentitySummary>> listIdentities() async => identities;
+
+  @override
+  Future<core.IdentityDeviceSummary> identityDeviceSummary(
+    core.IdentitySelector selector,
+  ) async {
+    deviceSummarySelectors.add(selector);
+    final error = deviceSummaryError;
+    if (error != null) throw error;
+    final id = (selector as core.IdIdentitySelector).id;
+    return core.IdentityDeviceSummary(
+      identity: identities.firstWhere((identity) => identity.id == id),
+      mode: core.IdentityDeviceMode.vNext,
+      readiness:
+          deviceReadiness[id] ?? core.IdentityDeviceReadiness.memberReady,
+    );
+  }
+
+  @override
+  Future<core.LegacyUpgradeStatus> legacyUpgradeStatus(
+    core.IdentitySelector selector,
+  ) async => legacyStatus;
 
   static const _deletedIdentity = core.DeleteLocalIdentityResult(
     deleted: core.IdentitySummary(

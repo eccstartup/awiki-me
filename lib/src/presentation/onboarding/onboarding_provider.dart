@@ -99,6 +99,8 @@ class OnboardingState {
       legacyUpgradeStatus.phase == LegacyIdentityUpgradePhase.running;
   bool get isLegacyUpgradeRetryRequired =>
       legacyUpgradeStatus.phase == LegacyIdentityUpgradePhase.retryRequired;
+  bool get legacyUpgradeRequiresDeviceJoin =>
+      legacyUpgradeStatus.requiresDeviceJoin;
   bool get isDeletingLocalIdentity =>
       deletingLocalIdentitySelector?.isNotEmpty == true;
   bool get hasRegistrationMethods =>
@@ -914,7 +916,19 @@ class OnboardingController extends StateNotifier<OnboardingState> {
     if (identityId == null || identityId.isEmpty) {
       return;
     }
+    if (state.legacyUpgradeRequiresDeviceJoin) {
+      return;
+    }
     await _resumeLegacyUpgradeAndLogin(identityId, inspectBeforeUpgrade: false);
+  }
+
+  void dismissLegacyUpgradeStatus() {
+    if (state.isLegacyUpgradeRunning) {
+      return;
+    }
+    state = state.copyWith(
+      legacyUpgradeStatus: const LegacyIdentityUpgradeStatus.idle(),
+    );
   }
 
   Future<void> _resumeLegacyUpgradeAndLogin(

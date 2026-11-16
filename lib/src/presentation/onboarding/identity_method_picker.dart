@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/identity_method.dart';
 import '../../l10n/l10n.dart';
+import '../app_shell/providers/session_provider.dart';
 import '../shared/awiki_me_design.dart';
 import 'onboarding_provider.dart';
 
@@ -16,6 +17,25 @@ class IdentityMethodPicker extends ConsumerWidget {
     final state = ref.watch(onboardingProvider);
     if (!state.isServerInfoReady) return const SizedBox.shrink();
     final controller = ref.read(onboardingProvider.notifier);
+    final localHandles = ref
+        .watch(sessionProvider)
+        .localCredentials
+        .map((identity) => identity.handle?.trim().toLowerCase() ?? '')
+        .where((handle) => handle.isNotEmpty)
+        .toSet();
+    // A pending registration is only offered when its method is otherwise
+    // unreachable, and never for a Handle that already has local identity
+    // material: resuming such a record only leads back into the conflict.
+    final pendingRegistrations = state.pendingRegistrations
+        .where(
+          (pending) =>
+              !state.availableDidMethods.contains(pending.method) &&
+              !_handleHasLocalIdentity(pending.fullHandle, localHandles),
+        )
+        .toList(growable: false);
+    final selectedPending = state.selectedPendingRegistration;
+    final showResumeHint =
+        selectedPending != null && pendingRegistrations.contains(selectedPending);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -57,7 +77,7 @@ class IdentityMethodPicker extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
         ],
-        for (final pending in state.pendingRegistrations)
+        for (final pending in pendingRegistrations)
           CupertinoButton(
             key: Key('identity-registration-pending-${pending.fullHandle}'),
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -73,7 +93,7 @@ class IdentityMethodPicker extends ConsumerWidget {
               '${context.l10n.identityRegistrationPending}: ${pending.fullHandle} (${pending.method.name.toUpperCase()})',
             ),
           ),
-        if (state.selectedPendingRegistration != null) ...[
+        if (showResumeHint) ...[
           Text(
             context.l10n.identityRegistrationResumeHint,
             key: const Key('identity-registration-resume-hint'),
@@ -83,4 +103,16 @@ class IdentityMethodPicker extends ConsumerWidget {
       ],
     );
   }
+}
+
+bool _handleHasLocalIdentity(String fullHandle, Set<String> localHandles) {
+  final pending = fullHandle.trim().toLowerCase();
+  if (pending.isEmpty) return false;
+  final short = pending.split('.').first;
+  return localHandles.any(
+    (handle) =>
+        handle == pending ||
+        handle == short ||
+        handle.split('.').first == short,
+  );
 }

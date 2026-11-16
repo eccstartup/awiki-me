@@ -7,8 +7,16 @@
 > `AwikiImCoreIdentityExportAdapter` / `AwikiImCoreIdentityBackupImportAdapter` 分别覆盖
 > `identityExportPortProvider` / `identityBackupImportPortProvider`。当前 onboarding 产生的
 > ANP 托管身份导出和接受导入的都是 root-control 私钥（`custody: "anp_root"`），
-> 设备签名/E2EE 密钥不可导出，也不会从备份恢复。导入入口位于设置 → 安全，不在
-> onboarding 新增；导入只安装身份材料，不恢复消息、联系人或会话。
+> 设备签名/E2EE 密钥不可导出，也不会从备份恢复。导入入口同时位于设置 → 安全和
+> 统一登录/注册页，仅在 Core 端口支持时展示：已登录时用于把备份身份导入当前
+> 本机，未登录时用于换机/首装后的身份恢复。导入只安装身份材料，不恢复消息、
+> 联系人或会话，也不使本机成为该身份的授权设备：导入的凭证是 `root_only`，
+> 没有设备密钥，不能兑换 JWT 或建立会话；使用该身份仍需真实设备 Join 或
+> Handle Recovery 授权本机。未登录导入或点按 root-only 凭证后，登录面板就地
+> 展示“恢复身份”面板，按本机实际凭证给出唯一正确的下一步：已有可用设备凭证时
+> 直接进入（无 OTP），只有 root 材料时授权本机（服务端声明根签名重绑时以根凭据
+> 把本机绑定到同一 DID，否则设备 Join；两者 DID 均不变），凭证缺失时重新导入；
+> 面板绝不自动登录、加入或恢复。
 >
 > 相关文档：[identity-secret-storage.md](identity-secret-storage.md)、
 > [storage-scope-vault-contract.md](storage-scope-vault-contract.md)、
@@ -86,8 +94,11 @@ awiki-credential-<handle>-<credential>-<timestamp>.zip
 
 ### 3.2 导入
 
-1. 设置 → 安全 → 导入身份备份。入口只在已登录且 Core 端口支持时可用；未登录时
-   必须先通过统一登录/注册进入，不在 onboarding 新增导入入口。
+1. 设置 → 安全 → 导入身份备份，或统一登录/注册页的“恢复身份”。入口只在
+   Core 端口支持时可用；未登录时入口仍可用，用于换机/首装后先把备份身份的 root
+   材料安装到本机。该凭证只具备 root 托管，不包含设备密钥，因此不能直接登录
+   （见本节第 9 条）。已登录导入要求同一 `SessionEpoch`；未登录导入要求
+   tenant 不变且流程结束时仍未出现会话。
 2. 打开“导入加密身份备份”对话框；选择文件走现有平台选择器
    （`AttachmentPickerService.pickAttachment`），App 拒绝空文件和超过 1 MiB 的文件，
    只读取一次，选后删除选择器暂存的应用内副本。
@@ -96,15 +107,51 @@ awiki-credential-<handle>-<credential>-<timestamp>.zip
 4. 摘要展示后按钮变为高风险的“导入身份”，并提示：导入会把该身份的根密钥和
    DID 文档安装到本设备；消息、联系人和会话不会被恢复；同时持有文件和口令的人
    可以恢复此身份。
-5. 确认后调用系统身份认证（`UserPresencePort`）。拒绝、平台认证失败或登录身份
-   已变化时都不调用 Core。
+5. 确认后调用系统身份认证（`UserPresencePort`）。拒绝、平台认证失败或本机身份
+   状态已变化时都不调用 Core。
 6. 认证通过后 Core 安装身份材料，返回 `identityId` / `did` / `rootKeyId` /
    `alreadyPresent`。
 7. 若导入的正是当前登录身份（Core 返回 `alreadyPresent`），保留会话并提示
-   “该身份已存在于本设备且已登录”。否则 App 退出当前会话、重新读取本地凭证，
-   回到统一登录/注册并提示“导入成功，请选择该凭证登录”；用户按普通登录流程以该
-   凭证激活会话，导入路径本身不重建 tenant runtime。
+   “该身份已存在于本设备且已登录”。否则 App 退出当前会话（未登录时无需退出）、
+   重新读取本地凭证，回到统一登录/注册并切到“登录”面板；同时以 Core 返回的
+   exact `identityId` / `did` 初始化“恢复身份”面板（见本条第 9 项），而不是只
+   弹一次 toast。导入路径本身不重建 tenant runtime，也不创建会话。
 8. 关闭或取消对话框会把已选备份字节清零；失败时对话框保持打开并显示脱敏错误。
+9. 导入凭证是 `root_only`：本机没有该身份的签名/E2EE 设备密钥，也没有服务端设备
+   记录；ANP 不能为既有 DID 追加设备密钥，v1 备份也不携带设备密钥。App 用 Core 的
+   `identityDeviceSummary(...).readiness == rootOnly` 判定该状态，在本地身份卡上展示
+   “仅根凭据 · 需授权本机”标记，并把点按行为从登录改为打开同一个恢复面板。面板
+   按精确 `did` + `localIdentityId`（绝不按 Handle 猜测；精确匹配优先于同 DID
+   回退）解析三个阶段：
+   - **直接进入**：本机已有该身份可用的非 root 设备凭证。主操作“直接进入”使用
+     该凭证一键登录，不发送验证码，也不触碰导入的 root 材料。
+   - **授权本机**：只有该身份的 root 条目（导入凭证或同 DID 仅有的 root 条目）。
+     默认主操作“授权本机（设备加入）”：DID 不变，只为当前设备追加设备密钥，必须由
+     该身份的已有设备批准；验证码只用于定位账号并请求批准，不创建新身份。当 Core
+     adapter 支持且服务端 `server-info` 声明 `identity.device_rebind` 根签名方法时，
+     主操作改为“把本机绑定到这个 DID”：不可逆确认后经 `UserPresencePort`，由根密钥
+     签发同 DID 的单设备替换文档，旧设备被原子替换，DID/Handle/根公钥/
+     `localIdentityId` 不变，设备加入降为次要操作；任一方未声明即 fail closed
+     回退到设备加入，不按域名或产品名猜测。仅当
+     服务端声明支持 phone OTP Handle Recovery 时，展示次要操作“改用 Handle
+     Recovery”并注明这是最后手段、会更换该身份的 DID，绝不自动触发。
+   - **凭证缺失**：本机没有匹配凭证。Core 仍支持导入时只提供“重新导入备份”；
+     该状态只会在开始过的设备加入移除本机 root 条目后出现，面板文案说明备份
+     文件不受影响、重新导入同一备份即可继续。
+   两条授权续接都要求移除这份不能登录的根凭据（Core 在 Join/Recovery 激活时
+   拒绝被 root-only 条目污染的状态），因此 App 先展示“本机导入的根凭据将被
+   移除”的确认，明确说明移除只影响本机、备份文件不会被删除。设备 Join 在用户提交
+   加入请求（OTP 换取 join session）成功后、任何轮询看到批准前删除本地 root-only
+   条目，再继续激活；这样在加入页返回或取消时导入仍可用。删除失败时立即取消该
+   Join 请求并停在本页，不进入激活。Handle Recovery 仍在进入恢复页前删除。
+   面板的“返回”只清除恢复意图，不改变任何凭证。设备 Join 页在恢复上下文显示
+   提示：加入后仍是同一个身份，DID 不会改变，验证码只用于找到账号并请求已有
+   设备批准本机。若用户仍走登录
+   路径，Core 对旧身份升级返回 `retry_required` +
+   `root_only_requires_device_join`，App 跳过升级、不创建会话，并在同一授权
+   说明投影中提供两个续接入口和一个返回按钮，而不是仅可返回的死路或可重复点击
+   的“重试”。Handle/手机号已绑定该 DID 只说明账户归属，不代表本设备已被该身份
+   的设备注册表授权；管理权/root 转移走独立流程，不由身份备份导入触发。
 
 导入口令与备份字节同样只存在于对话框和单次 Core 调用的内存中：服务层在每次 Core
 调用后清零口令副本，对话框在替换文件、关闭或导入完成时清零已选字节。App 不把备份
@@ -233,7 +280,12 @@ Core 必须：
 6. 失败时不得留下部分身份或部分密钥材料。
 7. 导入的身份只具备 root 材料，设备 readiness 为 `root_only`；App 的 runtime 启动
    检查必须接受 `root_only`（同时仍要求 ANP custody active/ready），否则导入后无法
-   登录。设备签名/E2EE 密钥由后续正常登录/注册流程产生，不来自备份。
+   完成本地身份确认。root-only 身份没有本地设备密钥，Core 的
+   `legacy_upgrade_status` / `upgrade_legacy_identity` 必须直接返回
+   `retry_required` + 稳定码 `root_only_requires_device_join`，不得尝试 legacy→vault
+   迁移；App 必须跳过升级、不创建会话，并展示设备 Join/Recovery 说明。设备签名/
+   E2EE 密钥只能来自真实设备 Join（或 Handle Recovery）在该 DID 上的授权，不来自
+   备份，也不能通过普通登录为既有 DID 追加。
 
 App 服务层顺序固定（[`identity_backup_import_service.dart`](../lib/src/application/identity_backup_import_service.dart)）：
 
@@ -388,7 +440,12 @@ mimeType: application/vnd.awiki.identity-backup
 | `lib/src/data/im_core/awiki_im_core_identity_backup_import_adapter.dart` | 调用 Core `inspectIdentityBackup` / `importIdentityBackup`，映射能力/权限/冲突错误 |
 | `lib/src/application/identity_backup_import_service.dart` | 文件选择与 1 MiB 上限、单次读取、口令编码/清零、presence、session 围栏、Core 调用 |
 | `lib/src/presentation/settings/identity_backup_import_dialog.dart` | 两阶段确认：检查备份 → 核对摘要 → 高风险导入 |
-| `settings_page.dart` / `app_runtime_provider.dart` | 三套响应式入口打开同一弹窗；`already_present` 保留会话，否则登出并重新加载本地凭证 |
+| `lib/src/presentation/onboarding/onboarding_page.dart` / `parts/onboarding_mac_part.dart` | 统一登录/注册页在 Core 支持时展示同一导入入口“恢复身份”，并在登录面板就地渲染恢复面板 |
+| `lib/src/presentation/onboarding/restore_identity_provider.dart` | 纯状态：恢复意图、按精确 identity/DID 解析三阶段、`begin` / `beginFromOutcome` / `beginForCredential` / `clear` |
+| `lib/src/presentation/onboarding/restore_identity_view_provider.dart` | 组合意图、本机凭证、服务端 Recovery 能力与 Core 导入支持，得到 `RestoreIdentityView` |
+| `lib/src/presentation/onboarding/parts/restore_identity_panel_part.dart` | 恢复面板：直接进入、授权本机/Recovery、刷新/重新导入与返回；自身不登录、不 Join、不恢复 |
+| `lib/src/presentation/onboarding/registration_entry_form.dart` / `parts/restore_identity_panel_part.dart` | 注册死路改为中性提示与唯一“恢复身份”入口；设备 Join 恢复上下文提示 |
+| `settings_page.dart` / `onboarding_page.dart` / `app_runtime_provider.dart` | 设置三套响应式入口与登录页共用同一弹窗；`already_present` 保留会话，否则登出并重新加载本地凭证；未登录导入按 tenant 围栏放行 |
 | `lib/src/app/app_services.dart`（导入） | `identityBackupImportPortProvider` / `identityBackupImportServiceProvider`（默认 `UnsupportedIdentityBackupImportPort`） |
 
 导出服务层顺序固定：
@@ -430,7 +487,13 @@ mimeType: application/vnd.awiki.identity-backup
 | `identity_backup_import.read_failed` / `inspect_failed` / `failed` | 通用导入失败提示 |
 
 成功路径：`alreadyPresent` 且导入的正是当前身份时提示“该身份已存在于本设备且已
-登录”；其余成功路径提示“导入成功，请选择该凭证登录”，随后回到统一登录/注册。
+登录”；其余成功路径回到统一登录/注册，自动切到“登录”面板，并就地展示“恢复
+身份”面板给出下一步（直接进入 / 授权本机 / 重新导入），而不是停留在注册表单或
+只提示一次成功。登录/注册表单的输入与本地 root-only 条目 Handle 匹配时，不等
+提交注册就展示中性提示与唯一的“恢复身份”入口，不再把“授权本机”和“Handle
+Recovery”拆成注册侧动作；Core 的未完成注册入口只在对应 DID 方法已不可新建时
+展示，本地已有身份材料的 Handle 也一律不展示（Core 记录仍保留，只是不再提供无法
+继续的重试入口）。
 
 错误只包含稳定 code、stage、count、时间；不包含异常正文、身份、路径或包内容。
 用户取消系统认证、保存面板或文件选择器属于正常路径，不按错误上报。
@@ -473,7 +536,37 @@ Widget：设置页点击入口打开弹窗；口令过短、两次不一致时�
 - 成功路径把同一引用字节与口令交给 Core，且 `userPresenceConfirmed == true`；
 - 对话框先检查再导入，摘要展示 DID/Handle/托管方式/导出时间，二次确认才调用导入；
 - 关闭对话框清零已选字节；失败保留对话框与脱敏错误；Core 不支持时失败关闭；
-- 设置页在 Core 支持且已登录时可打开导入对话框，未登录时入口不可用。
+- 设置页与登录页在 Core 支持时可打开导入对话框；Core 不支持时两处都不展示入口；
+- 未登录时导入只要求 tenant 不变且不出现会话；成功后刷新本地凭证但不建立会话。
+
+恢复面板与 root-only 授权路径（`tests/unit/restore_identity_view_test.dart`、
+`tests/unit/onboarding_page_test.dart`、
+`tests/unit/registration_entry_widget_test.dart`、
+`tests/unit/data/im_core/awiki_im_core_identity_adapter_test.dart`、
+`tests/unit/data/im_core/awiki_im_core_mappers_test.dart`、
+`tests/unit/devices/devices_ui_test.dart`）：
+
+- `resolveRestoreIdentityView` 按精确 `did` + `localIdentityId` 匹配，精确匹配优先于
+  同 DID 回退，绝不按 Handle；非 root 设备凭证 → 直接进入，仅 root 条目 → 授权本机，
+  无匹配 → 凭证缺失；Recovery 只在服务端声明支持时可用；
+- `listLocalIdentities` 按 `identityDeviceSummary(...).readiness` 标记 `rootOnly`，
+  selector 是 exact `IdIdentitySelector`；readiness 查询失败时按普通可登录凭证处理；
+- `rootOnly` 经 `appSessionFromIdentity` / `toLegacySessionIdentity` 透传；
+- 根凭据身份卡展示“仅根凭据 · 需授权本机”标记，点按打开恢复面板而不是登录
+  （`loginCalls == 0`）；
+- 直接进入一键登录且不发送验证码；凭证缺失只在 Core 支持时展示“重新导入备份”
+  （不再提供刷新），点按打开导入对话框；服务端未声明恢复能力时不展示 Handle
+  Recovery；
+- “授权本机（设备加入）”与“改用 Handle Recovery”先要求确认移除本机 root-only
+  条目（备份文件不删除，确认文案说明）；设备 Join 在提交加入请求成功后才删除本地
+  条目，返回或取消不会失去导入；删除失败时取消该 Join 请求；Handle Recovery 在
+  进入恢复页前删除，失败则留在面板；Handle 预填；取消确认则既不删除也不登录；
+  面板“返回”清除恢复意图；
+- 旧身份升级投影同样提供授权/恢复/返回三个动作，不再只有返回；
+- 注册冲突提示在中性提示内只提供唯一的“恢复身份”入口，点按打开恢复面板；不再
+  在注册表单内直接提供授权/恢复按钮，也不展示可点击的“前往登录页”；
+- 设备 Join 页在 `restoreIdentity` 上下文展示“DID 不会改变”提示，普通 Join 不展示；
+  `initialHandle` / `initialPhone` 预填并 trim。
 
 适配器导入（`awiki_im_core_identity_backup_import_adapter_test.dart`）：
 
@@ -504,6 +597,9 @@ Core（`crates/im-core/src/identity/registry.rs`，Rust 集成测试）：
 - 导入到 fresh root 后：摘要与源的 DID/Handle/root 材料一致，身份 readiness 为
   `root_only`，custody 为 ANP identity 且 ready，且没有 auth token；重复导入返回
   `already_present` 且不覆盖本地数据。
+- 导入后的 `legacy_upgrade_status` 与 `upgrade_legacy_identity` 都返回
+  `retry_required` + `root_only_requires_device_join`，且不写 pending 记录、
+  `device_state` 或 vault migration。
 - 部分安装（registry 投影丢失）后再次导入能完成投影并保持同一 identity ID。
 
 Core/跨端（待实现）：
@@ -526,11 +622,18 @@ Core/跨端（待实现）：
      `custody == "anp_root"`，导入后 readiness 为 `root_only`）；
    - App：`IdentityBackupImportService` +
      `AwikiImCoreIdentityBackupImportAdapter` + `IdentityBackupImportDialog`；
-     入口位于设置 → 安全，未新增 onboarding 入口；
+     入口位于设置 → 安全和统一登录/注册页，仅 Core 支持时展示；
    - 没有沿用旧 `importCredentialArchive` / 明文 ZIP 路径；
    - 导入成功后不做 tenant runtime 重建：Core 已在当前 runtime 内完成身份注册。
      若导入的是当前身份（`alreadyPresent`）则保留会话；否则退出当前会话、
-     重新读取本地凭证并回到统一登录，由用户以新凭证正常登录。
+     重新读取本地凭证并回到统一登录。未登录时导入同一条路径可用，退出会话为空操作。
+   - 导入凭证为 `root_only`，不能登录：身份卡标记“仅根凭据 · 需授权本机”，点按
+     打开就地“恢复身份”面板。面板按本机凭证给出直接进入 / 授权本机 / 重新导入
+     三种下一步；授权本机走设备 Join（DID 不变），Handle Recovery 仅在服务端声明
+     支持时作为更换 DID 的最后手段展示。设备 Join 在加入请求提交成功后、批准被
+     消费前才移除本机 root-only 条目（备份文件保留，提交前退出不影响导入）；
+     Recovery 在进入恢复页前移除。若仍走登录路径，Core 返回
+     `root_only_requires_device_join`，App 不进入旧身份升级重试，也不创建会话。
 4. E2E：在 `tests/e2e/` 增加 secret-free attestation，只记录“导出成功/大小/版本/
    恢复后 ID 连续性”，不记录口令、私钥或包内容。**尚未实现**：当前只有 Rust、
    service/adapter 与 widget 覆盖，没有 `identity-backup-import` E2E case，
@@ -550,5 +653,9 @@ Core/跨端（待实现）：
   identity 安装，`alreadyPresent` 由 Core 按 DID/公钥身份判定。
 - 不允许把身份备份当作 Root Key Transfer 或管理权转移。
 - 不允许把导入描述成消息、联系人、会话或 read state 的恢复。
+- 不允许把 `root_only` 导入凭证送入旧身份升级或建立会话，也不允许在 UI 上宣称
+  导入后可通过普通登录直接激活；该凭证只能配合设备 Join / Handle Recovery 使用。
+  “直接进入”只使用本机既有的非 root 设备凭证；导入的 root 凭证永远不能登录。
+  Recovery 只能在用户显式选择后启动，且必须说明它会更换该身份的 DID。
 - 不允许在 Core 返回失败时回退到“仅导出公开资料”并宣称成功。
 - 不允许在备份字节未通过 1 MiB 上限与 Core 校验时写入任何身份状态。

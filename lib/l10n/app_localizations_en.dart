@@ -395,7 +395,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get registrationLocalStateNeedsAttention =>
-      'This device has conflicting identity state. Keep its local data, enter the original Handle above, and use Continue previous recovery. Contact support if that option does not appear. Registering again will not resolve it.';
+      'This device already holds identity material for this Handle (for example an imported identity backup), but it cannot sign in with it yet. Use the actions below.';
+
+  @override
+  String get registrationLocalStateNeutralHint =>
+      'This device already holds identity material for this Handle (for example an imported identity backup). Registering will not create a new identity; restore the existing identity first.';
 
   @override
   String get registrationContinuityChanged =>
@@ -1213,6 +1217,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'An existing admin device must verify the 6-digit code shown on both devices';
 
   @override
+  String get deviceJoinRestoreIdentityHint =>
+      'Joining keeps the same identity — the DID does not change. The verification code only locates the account and asks an existing device to approve this device; it does not create a new identity.';
+
+  @override
   String get onboardingExistingHandleTitle => 'This Handle already exists';
 
   @override
@@ -1548,7 +1556,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get identityBackupImportWarning =>
-      'Import installs this identity\'s root key and DID document on this device. Messages, contacts and conversations are not restored. Anyone with this file and passphrase can restore the identity.';
+      'Import installs this identity\'s root key and DID document only — no device keys — and does not restore messages, contacts or conversations. If this device already has a usable device credential for the identity, you can enter directly after importing; otherwise add this device from an authorized device or use Handle Recovery before signing in. Anyone with this file and passphrase can restore the identity.';
 
   @override
   String get identityBackupImportSelectFile => 'Choose backup file';
@@ -3573,7 +3581,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get importSuccessSelectCredential =>
-      'Import succeeded. Please choose this credential to log in.';
+      'Import succeeded. This credential contains only the identity root credential; add this device from an authorized device or use Handle Recovery before signing in.';
 
   @override
   String localCredentialsRefreshed(Object count) {
@@ -4123,6 +4131,123 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get legacyIdentityUpgradeFailed =>
       'The legacy identity upgrade failed. Please try again.';
+
+  @override
+  String get legacyIdentityBackupRequiresDeviceJoin =>
+      'The identity backup contains only the DID root credential, not device keys, so this device cannot sign in with it yet.';
+
+  @override
+  String get legacyIdentityBackupRequiresDeviceJoinHint =>
+      'Add this device to that identity from an already authorized device, or restore access with Handle Recovery, then sign in again.';
+
+  @override
+  String get localCredentialRootOnlyBadge =>
+      'Root backup only · Authorize device';
+
+  @override
+  String get rootOnlyIdentityTitle => 'This device is not authorized yet';
+
+  @override
+  String get rootOnlyIdentityMessage =>
+      'An identity backup contains only the DID root credential, not this device\'s keys. The Handle and phone number already belong to this identity, but the server does not recognize this device yet. Join this device to the identity (an already authorized device must approve) or regain access with Handle Recovery.';
+
+  @override
+  String get rootOnlyAuthorizeDeviceAction => 'Authorize this device (Join)';
+
+  @override
+  String get rootOnlyHandleRecoveryAction => 'Recover with Handle Recovery';
+
+  @override
+  String get rootOnlyRemoveLocalIdentityTitle =>
+      'The imported root credential will be removed';
+
+  @override
+  String get rootOnlyRemoveLocalIdentityMessage =>
+      'Device Join removes this un-signed-in root credential once the join request has been sent — backing out before that leaves the import untouched. Handle Recovery removes it before the recovery page opens. Either way only this device is affected; your identity backup file is not deleted and can be imported again later.';
+
+  @override
+  String get rootOnlyRemoveLocalIdentityConfirm => 'Continue';
+
+  @override
+  String get registrationLocalStateOpenLoginAction => 'Go to Login';
+
+  @override
+  String get restoreIdentityTitle => 'Restore identity';
+
+  @override
+  String get restoreIdentityDirectEntryMessage =>
+      'This device already has a usable device credential for this identity. You can enter directly without a verification code.';
+
+  @override
+  String get restoreIdentityAuthorizationRequiredMessage =>
+      'The backup installed this identity\'s DID root credential and root key, but not a device key, so this device is not an authorized device of this DID yet. Adding this device leaves the DID unchanged, and an existing registered device of this identity must approve the join; the SMS code the server requires only locates the account and sends that approval request.';
+
+  @override
+  String get restoreIdentityCredentialMissingMessage =>
+      'No identity material for this DID remains on this device. A Device Join removes the imported root credential only after the join request has been sent; the backup file itself is unaffected, so importing the same backup again resumes the flow.';
+
+  @override
+  String get restoreIdentityDirectEnterAction => 'Enter directly';
+
+  @override
+  String get restoreIdentityRecoveryAction => 'Use Handle Recovery instead';
+
+  @override
+  String get restoreIdentityRecoveryNote =>
+      'Use this only when no existing device can approve the join. Handle Recovery replaces this identity\'s DID, so the recovered identity differs from the DID in the backup.';
+
+  @override
+  String get restoreIdentityImportAnotherAction => 'Import backup again';
+
+  @override
+  String get restoreIdentityRebindRequiredMessage =>
+      'The backup installed this identity\'s DID root credential and root key. This device can bind itself to that DID: the imported root key signs an updated DID document that adds this device\'s keys, so the DID, Handle and root key stay unchanged and no other device or SMS code is needed.';
+
+  @override
+  String get restoreIdentityRebindAction => 'Bind this device to the DID';
+
+  @override
+  String get restoreIdentityRebindNote =>
+      'This replaces the device entries currently listed in the DID document with this device\'s new device keys. The DID and Handle do not change.';
+
+  @override
+  String get restoreIdentityRebindConfirmTitle =>
+      'Bind this device to the imported DID?';
+
+  @override
+  String get restoreIdentityRebindConfirmMessage =>
+      'The imported root key will sign an updated DID document. The DID and Handle stay the same, and this device becomes the signed-in device. Any device currently listed in the DID document is replaced and must join again to use this identity.';
+
+  @override
+  String get restoreIdentityRebindConfirmAction => 'Bind device';
+
+  @override
+  String get restoreIdentityRebindPresenceReason =>
+      'Confirm binding this device to the imported identity.';
+
+  @override
+  String get deviceRebindUnsupported =>
+      'Binding this device is not available in this build or on this server.';
+
+  @override
+  String get deviceRebindUserPresenceDenied =>
+      'Identity verification was cancelled. The DID document was not changed.';
+
+  @override
+  String get deviceRebindConflict =>
+      'The DID document changed elsewhere and cannot be replaced safely from this device.';
+
+  @override
+  String get deviceRebindStateChanged =>
+      'The signed-in identity or tenant changed. Binding was cancelled.';
+
+  @override
+  String get deviceRebindFailed =>
+      'Could not update the DID document to bind this device.';
+
+  @override
+  String get deviceRebindSucceeded =>
+      'This device is now bound to the imported identity. You can enter directly.';
 
   @override
   String get localCredentialDeleteRecoveryHint =>

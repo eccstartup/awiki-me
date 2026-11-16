@@ -54,7 +54,7 @@ void _registerStateMachineRecoveryE2e() {
           account: account,
           handle: handle,
         );
-        final registered = await bootstrap.onboardingService!
+        final registered = await bootstrap!.onboardingService!
             .registerHandleWithPhone(
               phone: account.phone,
               otp: factor.otp,

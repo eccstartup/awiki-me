@@ -191,8 +191,33 @@ class AwikiImCoreIdentityAdapter
       _mapIdentityErrors(() async {
         final coreInstance = await _coreInstance();
         final identities = await coreInstance.listIdentities();
-        return identities.map(_mappers.appSessionFromIdentity).toList();
+        final sessions = <AppSession>[];
+        for (final identity in identities) {
+          sessions.add(
+            _mappers.appSessionFromIdentity(
+              identity,
+              rootOnly: await _isRootOnlyIdentity(coreInstance, identity),
+            ),
+          );
+        }
+        return sessions;
       });
+
+  /// Readiness is only a presentation hint here: when Core cannot report it,
+  /// the picker keeps the ordinary login path instead of inventing a state.
+  Future<bool> _isRootOnlyIdentity(
+    core.AwikiImCore coreInstance,
+    core.IdentitySummary identity,
+  ) async {
+    try {
+      final summary = await coreInstance.identityDeviceSummary(
+        core.IdentitySelector.id(identity.id),
+      );
+      return summary.readiness == core.IdentityDeviceReadiness.rootOnly;
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   Future<AppSession?> defaultIdentity() => _mapIdentityErrors(() async {
@@ -695,6 +720,7 @@ String _safeLegacyUpgradeFailureCode(String code) {
     'legacy_upgrade_failed',
     'local_state_unavailable',
     'permission_denied',
+    rootOnlyRequiresDeviceJoinCode,
     'service_error',
     'transport_unavailable',
   };

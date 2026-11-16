@@ -31,6 +31,7 @@ class SessionIdentity {
     this.handle,
     this.jwtToken,
     this.accountBinding,
+    this.rootOnly = false,
   });
 
   final String did;
@@ -43,6 +44,11 @@ class SessionIdentity {
   final String? localIdentityId;
   final String? handle;
   final String? jwtToken;
+
+  /// Core reports this identity as `rootOnly`: only the imported DID root
+  /// credential is present, with no device keys, so it cannot log in until a
+  /// Device Join or Handle Recovery authorizes this machine.
+  final bool rootOnly;
 
   /// Present only after Core has selected the identity and returned its typed
   /// active sync binding. Local identity inventory rows remain unbound.
@@ -81,6 +87,7 @@ class SessionIdentity {
       handle: handle,
       jwtToken: jwtToken,
       accountBinding: accountBinding,
+      rootOnly: rootOnly,
     );
   }
 }
